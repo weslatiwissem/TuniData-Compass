@@ -1,7 +1,6 @@
 # TuniData Compass
 
 **AI-Driven Education, Skills & Career Intelligence Platform for Tunisian Students**  
-Academic Project (PFE) — February 2026
 
 ## Project Overview
 TuniData Compass is a Business Intelligence and Artificial Intelligence platform designed to analyze the Tunisian job market, university curricula, and student skill profiles.  
