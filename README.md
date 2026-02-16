@@ -10,7 +10,7 @@ The solution combines  machine learning models, and  dashboards to support stude
 
 ## Objectives
 - Analyze Tunisian job market trends and skill demand
-- Identify skill gaps between academic curricula and industry needs
+- Identify skill gaps between user's curricula and industry needs
 - Provide personalized career recommendations for students
 - Predict future job and skill trends using machine learning
 - Deliver interactive dashboards for insights and reporting
