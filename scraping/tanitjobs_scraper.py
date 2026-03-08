@@ -1,16 +1,24 @@
 """
-tanitjobs_scraper.py - Complete Rewrite for IT Jobs
-----------------------------------------------------
-Properly extracts ALL fields from TanitJobs detail pages.
+tanitjobs_scraper.py - IT Category Edition
+-------------------------------------------
+Scrapes ONLY from the IT category pages (already filtered).
+Uses exact HTML selectors from TanitJobs.
 
-FIXES:
-- Extracts job description, requirements, experience, education
-- Better IT job detection
-- Handles the actual TanitJobs page structure
-- Collects 300+ IT jobs
+Target URL: https://www.tanitjobs.com/categories/705/informatique-jobs/
+Pages: 16 total
+
+Fields extracted:
+- job_title
+- company_name
+- location
+- job_link
+- description (from detail page)
+- required_skills (extracted from description)
+- posting_date
 
 Usage:
-  python tanitjobs_scraper.py --pages 20
+  python tanitjobs_scraper.py
+  python tanitjobs_scraper.py --pages 16
 """
 
 import argparse
@@ -41,53 +49,20 @@ from selenium.common.exceptions import TimeoutException
 # Configuration
 # ---------------------------------------------------------------------------
 BASE_URL = "https://www.tanitjobs.com"
+IT_CATEGORY_URL = f"{BASE_URL}/categories/705/informatique-jobs/"
 
-# Multiple search strategies for IT jobs
-SEARCH_QUERIES = [
-    "informatique",
-    "développeur", 
-    "software",
-    "IT",
-    "data",
-]
-
-# Extended IT keywords for filtering
-IT_KEYWORDS = [
-    # Job titles (French & English)
-    r"\bdéveloppeur\b", r"\bdeveloper\b", r"\bdev\b", r"\bingénieur informatique\b",
-    r"\bprogrammeur\b", r"\bsoftware engineer\b", r"\bdata scientist\b", r"\bdata analyst\b",
-    r"\bdevops\b", r"\barchitecte\b", r"\btech lead\b", r"\bscrum master\b",
-    r"\bweb developer\b", r"\bmobile developer\b", r"\bfull stack\b", r"\bfrontend\b", 
-    r"\bbackend\b", r"\bqa engineer\b", r"\btest\b", r"\bsecurity engineer\b",
-    r"\bnetwork\b", r"\bsystème\b", r"\badministrateur\b", r"\bdba\b",
-    r"\bcloud engineer\b", r"\bmlops\b", r"\bai engineer\b",
-    
-    # Tech keywords
-    r"\bpython\b", r"\bjava\b", r"\bjavascript\b", r"\bphp\b", r"\bc\+\+\b", r"\bc#\b",
-    r"\breact\b", r"\bangular\b", r"\bvue\b", r"\bdjango\b", r"\bspring\b", r"\blaravel\b",
-    r"\bsql\b", r"\bmongodb\b", r"\bpostgresql\b", r"\boracle\b",
-    r"\baws\b", r"\bazure\b", r"\bgcp\b", r"\bdocker\b", r"\bkubernetes\b",
-    r"\bmachine learning\b", r"\bdeep learning\b", r"\bdata science\b",
-    
-    # French IT terms
-    r"\binformatique\b", r"\blogiciel\b", r"\bapplication\b", r"\bbase de données\b",
-    r"\bréseau\b", r"\bsécurité informatique\b", r"\bdéveloppement\b",
-]
-
-IT_PATTERN = re.compile("|".join(IT_KEYWORDS), re.IGNORECASE)
-
-# Skills extraction pattern
+# Skill keywords for extraction
 SKILL_KEYWORDS = [
     "python", "java", "javascript", "typescript", "c#", "c\\+\\+", "php", "ruby",
     "swift", "kotlin", "go", "rust", "scala", "perl", "r\\b",
-    "react", "angular", "vue", "node\\.js", "next\\.js", "django", "flask",
-    "spring boot?", "laravel", "express", "asp\\.net",
+    "react", "angular", "vue\\.js", "node\\.js", "next\\.js", "django", "flask",
+    "spring", "laravel", "express", "asp\\.net", "symfony",
     "sql", "mysql", "postgresql", "mongodb", "redis", "elasticsearch", "oracle",
     "aws", "azure", "gcp", "docker", "kubernetes", "terraform", "jenkins",
-    "git", "linux", "nginx", "apache", "ci/cd", "devops",
+    "git", "github", "gitlab", "linux", "nginx", "apache", "ci/cd",
     "machine learning", "deep learning", "tensorflow", "pytorch", "pandas",
-    "numpy", "scikit-learn", "spark", "hadoop", "power bi", "tableau",
-    "agile", "scrum", "rest api", "graphql", "microservices",
+    "numpy", "scikit-learn", "spark", "hadoop", "airflow",
+    "power bi", "tableau", "excel", "agile", "scrum", "rest api", "graphql",
 ]
 
 SKILL_PATTERN = re.compile("|".join(SKILL_KEYWORDS), re.IGNORECASE)
@@ -104,34 +79,19 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def clean_text(text: str) -> str:
-    """Normalize whitespace and clean text."""
+    """Clean and normalize text."""
     if not text:
         return ""
     text = re.sub(r"\s+", " ", text)
-    text = text.strip()
-    return text
+    return text.strip()
 
 
 def extract_skills(text: str) -> str:
-    """Extract unique skill keywords from text."""
+    """Extract unique skills from text."""
     if not text:
         return ""
     found = {m.group().lower() for m in SKILL_PATTERN.finditer(text)}
     return ", ".join(sorted(found)) if found else ""
-
-
-def is_it_job(job: dict) -> bool:
-    """Check if job is IT-related."""
-    # Combine multiple fields for checking
-    text = " ".join([
-        job.get("job_title", ""),
-        job.get("job_category", ""),
-        job.get("description", "")[:1000],  # First 1000 chars
-        job.get("required_skills", ""),
-    ]).lower()
-    
-    # Must match at least one IT keyword
-    return bool(IT_PATTERN.search(text))
 
 
 def human_delay(min_sec=2, max_sec=4):
@@ -144,7 +104,7 @@ def human_delay(min_sec=2, max_sec=4):
 # ---------------------------------------------------------------------------
 
 def setup_driver():
-    """Initialize Chrome with anti-detection."""
+    """Initialize Chrome driver."""
     if USE_UNDETECTED:
         log.info("🛡️  Using undetected-chromedriver")
         options = uc.ChromeOptions()
@@ -163,7 +123,6 @@ def setup_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("--start-maximized")
     
     try:
         driver = webdriver.Chrome(options=options)
@@ -178,26 +137,27 @@ def setup_driver():
 
 
 def solve_cloudflare(driver, max_wait=120):
-    """Wait for Cloudflare challenge."""
+    """Wait for Cloudflare challenge to be solved."""
     log.info("╔════════════════════════════════════════════════════╗")
     log.info("║  🛡️  CLOUDFLARE DETECTED                          ║")
-    log.info("║  Please click the checkbox and wait...            ║")
+    log.info("║  Please click the checkbox...                     ║")
     log.info("╚════════════════════════════════════════════════════╝")
     
     start = time.time()
     while time.time() - start < max_wait:
         try:
             src = driver.page_source.lower()
-            url = driver.current_url
+            url = driver.current_url.lower()
             
-            if all(x not in src for x in ["cloudflare", "vérification de sécurité", "challenge"]):
+            # Check if we're past the challenge
+            if all(x not in src for x in ["cloudflare", "vérification", "challenge"]):
                 if "challenge" not in url:
                     log.info("✅ Challenge passed!")
                     time.sleep(2)
                     return True
             
             elapsed = int(time.time() - start)
-            if elapsed % 10 == 0:
+            if elapsed % 10 == 0 and elapsed > 0:
                 log.info(f"   ⏳ Waiting... ({max_wait - elapsed}s)")
         except:
             pass
@@ -207,17 +167,6 @@ def solve_cloudflare(driver, max_wait=120):
     return False
 
 
-def scroll_page(driver):
-    """Scroll to load lazy content."""
-    try:
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
-        time.sleep(0.5)
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(0.5)
-    except:
-        pass
-
-
 # ---------------------------------------------------------------------------
 # Scraping Functions
 # ---------------------------------------------------------------------------
@@ -225,7 +174,7 @@ def scroll_page(driver):
 def fetch_page(driver, url: str) -> BeautifulSoup | None:
     """Load page and handle Cloudflare."""
     try:
-        log.info(f"🌐 {url}")
+        log.info(f"🌐 Loading: {url}")
         driver.get(url)
         human_delay(2, 3)
         
@@ -237,98 +186,97 @@ def fetch_page(driver, url: str) -> BeautifulSoup | None:
             driver.get(url)
             human_delay(2, 3)
         
-        scroll_page(driver)
+        # Scroll to load lazy content
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+            time.sleep(0.5)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+        except:
+            pass
         
+        # Wait for job listings
         try:
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.TAG_NAME, "article"))
             )
         except TimeoutException:
-            log.warning("⚠️  Timeout")
+            log.warning("⚠️  Timeout waiting for articles")
         
         return BeautifulSoup(driver.page_source, "lxml")
+        
     except Exception as e:
-        log.error(f"Error: {e}")
+        log.error(f"Failed to load page: {e}")
         return None
 
 
 def parse_listing_page(soup: BeautifulSoup) -> list[dict]:
-    """Extract job cards from listing page."""
-    cards = []
+    """
+    Extract job cards from listing page using exact TanitJobs selectors.
+    """
+    jobs = []
     
     # Find all job articles
     articles = soup.select("article")
     
     if not articles:
-        log.warning("⚠️  No articles found")
-        return cards
+        log.warning("⚠️  No job articles found")
+        return jobs
+    
+    log.info(f"   Found {len(articles)} job cards")
     
     for article in articles:
-        job_id = article.get("id", "").strip()
-        
-        # Title and URL
-        title_link = article.select_one("h2 a, h3 a, a.link, .listing-item__title a")
+        # Job title and link
+        title_link = article.select_one("h2 a, h3 a, .listing-item__title a")
         if not title_link:
             continue
-            
+        
         job_title = clean_text(title_link.get_text())
-        job_url = title_link.get("href", "")
+        job_link = title_link.get("href", "")
         
-        if not job_url:
+        if not job_link:
             continue
-            
-        if not job_url.startswith("http"):
-            job_url = BASE_URL + job_url
         
-        # Company
-        company = article.select_one(".company-name, [href*='/company/']")
-        company_name = clean_text(company.get_text()) if company else ""
+        if not job_link.startswith("http"):
+            job_link = BASE_URL + job_link
         
-        # Location
-        location = article.select_one(".location, [class*='location']")
-        location_text = clean_text(location.get_text()) if location else ""
+        # Company name - exact selector from your example
+        company_elem = article.select_one(".listing-item-info-company")
+        company_name = clean_text(company_elem.get_text()) if company_elem else ""
         
-        # Category/Sector
-        category = article.select_one(".category, .sector, [class*='sector']")
-        job_category = clean_text(category.get_text()) if category else ""
+        # Remove trailing dash if present
+        company_name = re.sub(r'\s*-\s*$', '', company_name)
         
-        # Contract type
-        contract = article.select_one(".contract, [class*='contract']")
-        contract_type = clean_text(contract.get_text()) if contract else ""
+        # Location - exact selector from your example
+        location_elem = article.select_one(".listing-item-info-location")
+        location = clean_text(location_elem.get_text()) if location_elem else ""
         
-        # Date
-        date_elem = article.select_one("time, .date")
-        posting_date = ""
-        if date_elem:
-            posting_date = date_elem.get("datetime") or clean_text(date_elem.get_text())
+        # Note: posting_date will be extracted from detail page
         
-        cards.append({
-            "job_id": job_id,
+        jobs.append({
             "job_title": job_title,
             "company_name": company_name,
-            "location": location_text,
-            "job_category": job_category,
-            "contract_type": contract_type,
-            "posting_date": posting_date,
-            "job_url": job_url,
-            "experience": "",
-            "education": "",
+            "location": location,
+            "job_link": job_link,
             "description": "",
             "required_skills": "",
+            "posting_date": "",
         })
     
-    return cards
+    return jobs
 
 
 def extract_job_details(driver, url: str) -> dict:
-    """Extract full details from job detail page."""
+    """
+    Extract description and posting date from job detail page (Voir Plus).
+    
+    Date: .listing-item__info--item-date (e.g., "Il'y a 1 semaine")
+    Description: <p> tags in the job description section
+    """
     details = {
         "description": "",
         "required_skills": "",
-        "experience": "",
-        "education": "",
-        "contract_type": "",
-        "job_category": "",
+        "posting_date": "",
     }
     
     if not url:
@@ -337,99 +285,79 @@ def extract_job_details(driver, url: str) -> dict:
     try:
         driver.get(url)
         human_delay(2, 3)
-        scroll_page(driver)
+        
+        # Scroll to load all content
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+        except:
+            pass
         
         soup = BeautifulSoup(driver.page_source, "lxml")
         
-        # --- Extract Description ---
-        # Try multiple selectors
-        desc_section = (
-            soup.select_one("#description") or
-            soup.select_one(".job-description") or
-            soup.select_one("[class*='description']") or
-            soup.select_one(".job-detail") or
-            soup.find("h3", string=re.compile(r"Description", re.I))
-        )
+        # --- Extract Posting Date (from detail page) ---
+        date_elem = soup.select_one(".listing-item__info--item-date")
+        if date_elem:
+            details["posting_date"] = clean_text(date_elem.get_text())
         
-        if desc_section:
-            # If it's a header, get the next sibling content
-            if desc_section.name in ["h2", "h3", "h4"]:
-                content = desc_section.find_next_sibling()
-                if content:
-                    desc_section = content
+        # --- Extract Description ---
+        # The description is in <p> tags, as shown in your example
+        # Look for the main content area with paragraphs
+        
+        # Try to find the job description section
+        desc_paragraphs = []
+        
+        # Method 1: Find all <p> tags in the main content
+        # Usually after the job header/title
+        all_paragraphs = soup.select("p")
+        
+        for p in all_paragraphs:
+            text = clean_text(p.get_text())
             
-            # Remove scripts/styles
-            for tag in desc_section.select("script, style"):
-                tag.decompose()
+            # Skip very short paragraphs (likely navigation/footer)
+            if len(text) < 20:
+                continue
             
-            description = clean_text(desc_section.get_text(separator=" "))
+            # Skip paragraphs that look like navigation
+            if any(x in text.lower() for x in ["connexion", "inscription", "© 20", "mentions légales"]):
+                continue
+            
+            desc_paragraphs.append(text)
+        
+        if desc_paragraphs:
+            # Join all description paragraphs
+            description = " ".join(desc_paragraphs)
+            
+            # Clean up excessive line breaks
+            description = re.sub(r'\s+', ' ', description)
+            
             details["description"] = description
             details["required_skills"] = extract_skills(description)
         
-        # --- Extract Meta Information ---
-        # Look for info blocks with labels like "Experience:", "Type d'emploi:", etc.
-        
-        # Method 1: Find specific labeled sections
-        all_text = soup.get_text()
-        
-        # Experience
-        exp_match = re.search(r"Expérience?\s*:?\s*([^\n]+)", all_text, re.I)
-        if exp_match:
-            details["experience"] = clean_text(exp_match.group(1))
-        
-        # Education/Formation
-        edu_match = re.search(r"(?:Formation|Diplôme|Niveau d'études)\s*:?\s*([^\n]+)", all_text, re.I)
-        if edu_match:
-            details["education"] = clean_text(edu_match.group(1))
-        
-        # Contract type
-        contract_match = re.search(r"Type d'emploi\s*:?\s*([^\n]+)", all_text, re.I)
-        if contract_match:
-            details["contract_type"] = clean_text(contract_match.group(1))
-        
-        # Method 2: Look for structured data in lists
-        info_lists = soup.select("ul, dl, .job-info, .listing-detail__info")
-        for info_list in info_lists:
-            items = info_list.select("li, dt, dd")
-            for i, item in enumerate(items):
-                text = clean_text(item.get_text()).lower()
-                
-                # Try to get value from next sibling or span
-                value = ""
-                if i + 1 < len(items):
-                    value = clean_text(items[i + 1].get_text())
-                else:
-                    value_elem = item.select_one("span, strong")
-                    if value_elem:
-                        value = clean_text(value_elem.get_text())
-                
-                if "expérience" in text and value:
-                    details["experience"] = value
-                elif "formation" in text or "diplôme" in text:
-                    details["education"] = value
-                elif "type" in text or "contrat" in text:
-                    details["contract_type"] = value
-                elif "secteur" in text or "catégorie" in text:
-                    details["job_category"] = value
-        
-        # If no description found, try to extract from entire page
+        # Method 2: If no paragraphs found, try to find description div/section
         if not details["description"]:
-            # Get all paragraphs
-            paragraphs = soup.select("p")
-            desc_parts = []
-            for p in paragraphs:
-                text = clean_text(p.get_text())
-                if len(text) > 50:  # Only substantial paragraphs
-                    desc_parts.append(text)
+            desc_section = (
+                soup.select_one(".job-description") or
+                soup.select_one("[class*='description']") or
+                soup.select_one("#description") or
+                soup.select_one(".listing-detail")
+            )
             
-            if desc_parts:
-                details["description"] = " ".join(desc_parts[:5])  # First 5 paragraphs
-                details["required_skills"] = extract_skills(details["description"])
+            if desc_section:
+                # Remove navigation/script elements
+                for tag in desc_section.select("script, style, nav, header, footer, .sidebar"):
+                    tag.decompose()
+                
+                description = clean_text(desc_section.get_text(separator=" "))
+                
+                if len(description) > 50:
+                    details["description"] = description
+                    details["required_skills"] = extract_skills(description)
         
         return details
         
     except Exception as e:
-        log.error(f"Detail extraction failed: {e}")
+        log.error(f"Detail extraction failed for {url}: {e}")
         return details
 
 
@@ -438,85 +366,94 @@ def extract_job_details(driver, url: str) -> dict:
 # ---------------------------------------------------------------------------
 
 CSV_FIELDS = [
-    "job_id", "job_title", "company_name", "location", "job_category",
-    "contract_type", "experience", "education", "posting_date",
-    "description", "required_skills", "job_url", "scraped_at",
+    "job_title",
+    "company_name",
+    "location",
+    "job_link",
+    "description",
+    "required_skills",
+    "posting_date",
 ]
 
 
-def scrape(max_pages_per_search: int, output_path: str, delay: float, target_jobs: int = 300):
+def scrape(total_pages: int, output_path: str, delay: float):
     """Main scraping orchestrator."""
     
     driver = setup_driver()
     if not driver:
+        log.error("❌ Failed to initialize browser")
         return
     
     all_jobs = []
-    seen_urls = set()
     scraped_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    seen_urls = set()
     
     try:
-        for search_query in SEARCH_QUERIES:
-            log.info("═" * 70)
-            log.info(f"🔍 Searching: '{search_query}'")
-            log.info("═" * 70)
+        log.info("═" * 70)
+        log.info("🎯 Scraping IT jobs from: /categories/705/informatique-jobs/")
+        log.info(f"📄 Total pages to scrape: {total_pages}")
+        log.info("═" * 70)
+        
+        for page_num in range(1, total_pages + 1):
+            log.info("")
+            log.info(f"📄 PAGE {page_num}/{total_pages}")
+            log.info("─" * 70)
             
-            for page in range(1, max_pages_per_search + 1):
-                url = f"{BASE_URL}/jobs?search={search_query}&page={page}"
-                
-                log.info(f"📄 Page {page}/{max_pages_per_search}")
-                
-                soup = fetch_page(driver, url)
-                if not soup:
-                    log.warning("Failed to load page")
-                    break
-                
-                cards = parse_listing_page(soup)
-                if not cards:
-                    log.info("No more jobs - next search")
-                    break
-                
-                log.info(f"   Found {len(cards)} job cards")
-                
-                for idx, card in enumerate(cards, 1):
-                    # Skip duplicates
-                    if card["job_url"] in seen_urls:
-                        continue
-                    
-                    seen_urls.add(card["job_url"])
-                    
-                    log.info(f"   [{idx}/{len(cards)}] {card['job_title'][:55]}")
-                    
-                    # Fetch details
-                    details = extract_job_details(driver, card["job_url"])
-                    
-                    # Merge details into card
-                    for key, val in details.items():
-                        if val and not card.get(key):
-                            card[key] = val
-                    
-                    # Filter IT jobs
-                    if is_it_job(card):
-                        card["scraped_at"] = scraped_at
-                        all_jobs.append(card)
-                        log.info(f"        ✓ IT job! ({len(all_jobs)} total)")
-                    else:
-                        log.info(f"        ✗ Not IT - skipped")
-                    
-                    human_delay(delay, delay + 1)
-                    
-                    # Check if target reached
-                    if len(all_jobs) >= target_jobs:
-                        log.info(f"🎯 Target reached: {len(all_jobs)} jobs!")
-                        break
-                
-                if len(all_jobs) >= target_jobs:
-                    break
-                
-                human_delay(delay + 1, delay + 2)
+            # Build URL
+            url = f"{IT_CATEGORY_URL}?page={page_num}"
             
-            if len(all_jobs) >= target_jobs:
-                break
+            # Fetch listing page
+            soup = fetch_page(driver, url)
+            if not soup:
+                log.warning(f"Failed to load page {page_num}")
+                continue
+            
+            # Parse job cards
+            jobs = parse_listing_page(soup)
+            
+            if not jobs:
+                log.warning("No jobs found on this page")
+                continue
+            
+            # Extract details for each job
+            for idx, job in enumerate(jobs, 1):
+                # Skip duplicates
+                if job["job_link"] in seen_urls:
+                    log.info(f"   [{idx}/{len(jobs)}] Duplicate - skipping")
+                    continue
+                
+                seen_urls.add(job["job_link"])
+                
+                log.info(f"   [{idx}/{len(jobs)}] {job['job_title'][:55]}")
+                log.info(f"             Company: {job['company_name'][:40]}")
+                
+                # Fetch job details
+                details = extract_job_details(driver, job["job_link"])
+                
+                # Merge details
+                job["description"] = details["description"]
+                job["required_skills"] = details["required_skills"]
+                job["posting_date"] = details["posting_date"]  # Now from detail page
+                
+                # Add to collection
+                all_jobs.append(job)
+                
+                desc_preview = job["description"][:80] + "..." if job["description"] else "No description"
+                skills_preview = job["required_skills"][:60] if job["required_skills"] else "No skills"
+                date_info = job["posting_date"] if job["posting_date"] else "No date"
+                
+                log.info(f"             ✓ Date: {date_info}")
+                log.info(f"             ✓ Description: {desc_preview}")
+                log.info(f"             ✓ Skills: {skills_preview}")
+                
+                # Delay between requests
+                human_delay(delay, delay + 1)
+            
+            log.info(f"   ✅ Page {page_num} complete: {len(jobs)} jobs added")
+            log.info(f"   📊 Total collected: {len(all_jobs)} jobs")
+            
+            # Delay between pages
+            human_delay(delay + 1, delay + 2)
     
     except KeyboardInterrupt:
         log.info("\n⚠️  Interrupted by user")
@@ -528,7 +465,7 @@ def scrape(max_pages_per_search: int, output_path: str, delay: float, target_job
             pass
         log.info("🔒 Browser closed")
     
-    # Save CSV
+    # Save to CSV
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     
@@ -537,18 +474,21 @@ def scrape(max_pages_per_search: int, output_path: str, delay: float, target_job
         writer.writeheader()
         writer.writerows(all_jobs)
     
+    log.info("")
     log.info("═" * 70)
     log.info(f"✅  SAVED {len(all_jobs)} IT JOBS → {out.resolve()}")
     log.info("═" * 70)
     
-    # Stats
+    # Statistics
     with_desc = sum(1 for j in all_jobs if j.get("description"))
     with_skills = sum(1 for j in all_jobs if j.get("required_skills"))
     
-    log.info(f"📊 Stats:")
-    log.info(f"   - Total jobs: {len(all_jobs)}")
-    log.info(f"   - With description: {with_desc}")
-    log.info(f"   - With skills: {with_skills}")
+    log.info("")
+    log.info("📊 Statistics:")
+    log.info(f"   • Total jobs: {len(all_jobs)}")
+    log.info(f"   • With description: {with_desc} ({with_desc/len(all_jobs)*100:.1f}%)" if all_jobs else "   • With description: 0")
+    log.info(f"   • With skills: {with_skills} ({with_skills/len(all_jobs)*100:.1f}%)" if all_jobs else "   • With skills: 0")
+    log.info("")
 
 
 # ---------------------------------------------------------------------------
@@ -556,15 +496,21 @@ def scrape(max_pages_per_search: int, output_path: str, delay: float, target_job
 # ---------------------------------------------------------------------------
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="TanitJobs IT Scraper - Fixed Version")
-    parser.add_argument("--pages", type=int, default=20,
-                        help="Pages per search term (default: 20)")
-    parser.add_argument("--output", type=str, default="tanitjobs_it_jobs.csv",
-                        help="Output file")
-    parser.add_argument("--delay", type=float, default=2.5,
-                        help="Delay between requests (default: 2.5s)")
-    parser.add_argument("--target", type=int, default=300,
-                        help="Target number of IT jobs (default: 300)")
+    parser = argparse.ArgumentParser(
+        description="Scrape IT jobs from TanitJobs informatique category"
+    )
+    parser.add_argument(
+        "--pages", type=int, default=16,
+        help="Number of pages to scrape (default: 16)"
+    )
+    parser.add_argument(
+        "--output", type=str, default="tanitjobs_it_jobs.csv",
+        help="Output CSV file"
+    )
+    parser.add_argument(
+        "--delay", type=float, default=2.5,
+        help="Delay between requests in seconds (default: 2.5)"
+    )
     return parser.parse_args()
 
 
@@ -572,14 +518,18 @@ if __name__ == "__main__":
     args = parse_args()
     
     log.info("╔════════════════════════════════════════════════════════╗")
-    log.info("║     TanitJobs IT Scraper - FIXED VERSION              ║")
-    log.info("║     Target: 300+ IT jobs with full details            ║")
+    log.info("║     TanitJobs IT Category Scraper                     ║")
+    log.info("║     Category: Informatique (Pre-filtered)             ║")
     log.info("╚════════════════════════════════════════════════════════╝")
+    log.info("")
+    log.info(f"Configuration:")
+    log.info(f"  • Pages: {args.pages}")
+    log.info(f"  • Delay: {args.delay}s")
+    log.info(f"  • Output: {args.output}")
     log.info("")
     
     scrape(
-        max_pages_per_search=args.pages,
+        total_pages=args.pages,
         output_path=args.output,
         delay=args.delay,
-        target_jobs=args.target,
     )

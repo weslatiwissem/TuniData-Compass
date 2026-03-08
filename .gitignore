@@ -1,4 +1,12 @@
-*.exe
 __pycache__/
+*.pyc
+
+# Virtual environments
 venv/
+scraper_env/
+
+# Node
 node_modules/
+
+# Executables
+*.exe
