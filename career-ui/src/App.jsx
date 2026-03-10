@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import SkillInput from './components/SkillInput'
-import Results from './components/Results'
+import Dashboard from './components/Dashboard'
 import './App.css'
 
 export default function App() {
@@ -52,7 +52,7 @@ export default function App() {
         {!results ? (
           <SkillInput onSubmit={handleSubmit} loading={loading} error={error} />
         ) : (
-          <Results data={results} onReset={handleReset} />
+          <Dashboard data={results} onReset={handleReset} />
         )}
       </main>
 
