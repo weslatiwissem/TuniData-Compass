@@ -1,7 +1,7 @@
 // src/components/SkillGapAnalyzer.jsx
 import { useState, useEffect } from 'react'
 
-const API = 'http://localhost:8000'
+import API from '../api.js'
 
 export default function SkillGapAnalyzer() {
   const [domains, setDomains]     = useState([])

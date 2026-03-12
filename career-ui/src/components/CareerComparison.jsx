@@ -1,7 +1,7 @@
 // src/components/CareerComparison.jsx
 import { useState, useEffect } from 'react'
 
-const API = 'http://localhost:8000'
+import API from '../api.js'
 
 const COLORS = ['var(--amber)', '#60a5fa', '#34d399']
 const COLORS_DIM = ['var(--amber-glow)', 'rgba(96,165,250,0.12)', 'rgba(52,211,153,0.12)']

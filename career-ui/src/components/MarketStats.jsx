@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
 
-const API = 'http://localhost:8000'
+import API from '../api.js'
 
 const AMBER  = '#f5a623'
 const GREEN  = '#34d399'

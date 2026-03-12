@@ -1,7 +1,7 @@
 // src/components/DomainExplorer.jsx
 import { useState, useEffect } from 'react'
 
-const API = 'http://localhost:8000'
+import API from '../api.js'
 
 export default function DomainExplorer() {
   const [domains, setDomains]       = useState([])
