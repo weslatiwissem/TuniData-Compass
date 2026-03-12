@@ -3,3 +3,5 @@ __pycache__/
 *.pyc   
 
 venv/
+scraping/chrome-headless-shell.exe
+scraping/chrome-headless-shell.exe
