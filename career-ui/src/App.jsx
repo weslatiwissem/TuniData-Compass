@@ -8,7 +8,7 @@ import MarketStats from './components/MarketStats'
 import CareerComparison from './components/CareerComparison'
 import './App.css'
 
-import API from '../api.js'
+import API from './api.js'
 
 const NAV = [
   { id: 'recommend',   label: '◈ Recommend',   short: 'Recommend' },
