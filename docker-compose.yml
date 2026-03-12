@@ -1,0 +1,23 @@
+services:
+  api:
+    build:
+      context: ./recomendation_system
+      dockerfile: Dockerfile
+    container_name: tunidata-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./career-ui
+      dockerfile: Dockerfile
+      args:
+        # Points the built React app at the API
+        VITE_API_URL: http://localhost:8000
+    container_name: tunidata-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
