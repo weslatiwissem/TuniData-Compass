@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field
 
 from recommender import CareerRecommender
 
+from fastapi import UploadFile, File
+from cv_parser import parse_cv, parse_free_text
+
 # ─────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────
@@ -140,6 +143,14 @@ class MissingSkillsResponse(BaseModel):
     input_skills  : list[str]
     missing_skills: list[MissingSkill]
 
+class FreeTextRequest(BaseModel):
+    text: str = Field(..., min_length=20,
+        description="Write anything about yourself, your experience, your stack...")
+
+class ParsedSkillsResponse(BaseModel):
+    extracted_skills: list[str]
+    count           : int
+
 
 # ─────────────────────────────────────────────────────────────
 # ENDPOINTS
@@ -268,3 +279,69 @@ def missing_skills(request: MissingSkillsRequest):
         input_skills   = valid_skills,
         missing_skills = [MissingSkill(**m) for m in missing],
     )
+
+@app.post(
+    "/parse-cv",
+    tags           = ["Parser"],
+    summary        = "Upload a PDF CV to extract skills",
+    response_model = ParsedSkillsResponse,
+)
+async def parse_cv_endpoint(file: UploadFile = File(...)):
+    """
+    Upload your PDF CV.
+    The parser extracts all recognisable skills
+    matched against the job dataset vocabulary.
+    """
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Engine not loaded.")
+
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
+    contents = await file.read()
+    vocab    = set(engine.skill_vectorizer.vocabulary_.keys())
+
+    try:
+        result = parse_cv(contents, vocab)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    if result["count"] == 0:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No recognisable skills found in your CV. "
+                "Make sure it contains skill keywords like 'Python', 'SQL', etc."
+            ),
+        )
+    return ParsedSkillsResponse(**result)
+
+
+@app.post(
+    "/parse-text",
+    tags           = ["Parser"],
+    summary        = "Write about yourself to extract skills",
+    response_model = ParsedSkillsResponse,
+)
+def parse_text_endpoint(request: FreeTextRequest):
+    """
+    Write a short paragraph about your experience
+    (e.g. 'I have 3 years of experience in Python and machine learning...').
+    The parser extracts all recognisable skills.
+    """
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Engine not loaded.")
+
+    vocab  = set(engine.skill_vectorizer.vocabulary_.keys())
+    result = parse_free_text(request.text, vocab)
+
+    if result["count"] == 0:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No recognisable skills found in your text. "
+                "Try mentioning specific technologies like 'Python', 'SQL', 'React'..."
+            ),
+        )
+    return ParsedSkillsResponse(**result)
+
