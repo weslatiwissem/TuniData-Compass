@@ -1,5 +1,15 @@
-scraper_env/
 __pycache__/
-*.pyc   
+*.pyc
 
+# Virtual environments
 venv/
+scraping/chrome-headless-shell.exe
+scraping/chrome-headless-shell.exe
+scraper_env/
+
+# Node
+node_modules/
+
+# Executables
+*.exe
+
