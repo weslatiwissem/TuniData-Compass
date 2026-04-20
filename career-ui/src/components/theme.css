@@ -1,0 +1,149 @@
+/* ── Root Theme (Light) ─────────────────────────────── */
+:root {
+  --font-size: 16px;
+
+  --background: #ffffff;
+  --foreground: #111827;
+
+  --card: #ffffff;
+  --card-foreground: #111827;
+
+  --primary: #030213;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f3f4f6;
+  --secondary-foreground: #030213;
+
+  --muted: #ececf0;
+  --muted-foreground: #717182;
+
+  --accent: #e9ebef;
+  --accent-foreground: #030213;
+
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(0, 0, 0, 0.1);
+  --input-background: #f3f3f5;
+
+  --radius: 10px;
+
+  /* Charts */
+  --chart-1: #e67e22;
+  --chart-2: #3498db;
+  --chart-3: #9b59b6;
+  --chart-4: #f1c40f;
+  --chart-5: #e74c3c;
+}
+
+/* ── Dark Mode ─────────────────────────────────────── */
+.dark {
+  --background: #0d0f14;
+  --foreground: #eef0f6;
+
+  --card: #13161e;
+  --card-foreground: #eef0f6;
+
+  --primary: #ffffff;
+  --primary-foreground: #111827;
+
+  --secondary: #1a1e2a;
+  --secondary-foreground: #eef0f6;
+
+  --muted: #1f2433;
+  --muted-foreground: #8b92a8;
+
+  --accent: #1a1e2a;
+  --accent-foreground: #eef0f6;
+
+  --destructive: #f87171;
+  --destructive-foreground: #ffffff;
+
+  --border: #252836;
+  --input-background: #1a1e2a;
+}
+
+/* ── Base Reset ────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+}
+
+/* ── Typography ───────────────────────────────────── */
+h1, h2, h3, h4 {
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+h1 { font-size: 28px; }
+h2 { font-size: 24px; }
+h3 { font-size: 20px; }
+h4 { font-size: 16px; }
+
+label,
+button {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+input,
+textarea {
+  font-size: 14px;
+  font-weight: 400;
+  background: var(--input-background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  color: var(--foreground);
+}
+
+/* ── Utility Classes (replacement for @apply) ───────── */
+.card {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.btn {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.input {
+  width: 100%;
+}
+
+/* ── Smooth Theme Transition ───────────────────────── */
+body, .card, .btn, input {
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
