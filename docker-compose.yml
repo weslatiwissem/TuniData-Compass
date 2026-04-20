@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  # ── FastAPI Backend ────────────────────────────────────────
+  backend:
+    build:
+      context: ./recomendation_system
+      dockerfile: Dockerfile
+    container_name: compass-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CSV_PATH=/app/data/jobs.csv
+    volumes:
+      - ./backend/data:/app/data:ro
+      - compass-uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── React Frontend ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./career-ui
+      dockerfile: Dockerfile
+    container_name: compass-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  compass-uploads:
