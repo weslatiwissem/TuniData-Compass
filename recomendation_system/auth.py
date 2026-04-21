@@ -1,11 +1,9 @@
 """
-auth.py — JWT authentication for TuniData Compass
-Handles user registration, login, token creation and verification.
+auth.py — JWT authentication with MongoDB Atlas
 """
-
 from __future__ import annotations
+
 import os
-import re
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -14,7 +12,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
@@ -22,16 +22,26 @@ from pydantic import BaseModel, EmailStr
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production-use-a-long-random-string")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7   # 7 days
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_DB  = os.getenv("MONGO_DB", "compass")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-# auto_error=False so unauthenticated requests return None rather than 401
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
-# ─────────────────────────────────────────────────────────────
-# IN-MEMORY USER STORE  (replace with DB in production)
-# ─────────────────────────────────────────────────────────────
-# { email: UserInDB }
-_users: dict[str, "UserInDB"] = {}
+# Shared motor client (initialised in lifespan)
+_client: AsyncIOMotorClient | None = None
+_db = None
+
+
+def init_db(mongo_uri: str, db_name: str):
+    global _client, _db
+    _client = AsyncIOMotorClient(mongo_uri)
+    _db = _client[db_name]
+    return _db
+
+
+def get_db():
+    return _db
 
 
 # ─────────────────────────────────────────────────────────────
@@ -40,14 +50,23 @@ _users: dict[str, "UserInDB"] = {}
 class UserCreate(BaseModel):
     first_name: str
     last_name: str
-    email: str          # plain str; we normalize manually
+    email: str
     password: str
     role: str = "Job Seeker"
 
 
 class UserLogin(BaseModel):
-    email: str          # plain str to avoid pydantic EmailStr normalization mismatches
+    email: str
     password: str
+
+
+class ProfileSection(BaseModel):
+    """Structured sections extracted from CV"""
+    summary: Optional[str] = None
+    education: list[dict] = []
+    experience: list[dict] = []
+    languages: list[str] = []
+    certifications: list[str] = []
 
 
 class UserPublic(BaseModel):
@@ -60,9 +79,12 @@ class UserPublic(BaseModel):
     skills: list[str]
     preferences: dict
     cv_filename: Optional[str]
-    saved_jobs: list[int]
-    applied_jobs: list[int]
+    saved_jobs: list[str]
+    applied_jobs: list[str]
     experience: list[dict]
+    education: list[dict]
+    languages: list[str]
+    certifications: list[str]
     created_at: str
     avatar_color: str
 
@@ -75,11 +97,10 @@ class UserUpdate(BaseModel):
     skills: Optional[list[str]] = None
     preferences: Optional[dict] = None
     experience: Optional[list[dict]] = None
+    education: Optional[list[dict]] = None
+    languages: Optional[list[str]] = None
+    certifications: Optional[list[str]] = None
     avatar_color: Optional[str] = None
-
-
-class UserInDB(UserPublic):
-    hashed_password: str
 
 
 class TokenResponse(BaseModel):
@@ -110,121 +131,189 @@ def _initials_color(name: str) -> str:
     return colors[idx]
 
 
+def _doc_to_user(doc: dict) -> UserPublic:
+    return UserPublic(
+        id=str(doc["_id"]),
+        first_name=doc.get("first_name", ""),
+        last_name=doc.get("last_name", ""),
+        email=doc.get("email", ""),
+        role=doc.get("role", ""),
+        bio=doc.get("bio", ""),
+        skills=doc.get("skills", []),
+        preferences=doc.get("preferences", {}),
+        cv_filename=doc.get("cv_filename"),
+        saved_jobs=doc.get("saved_jobs", []),
+        applied_jobs=doc.get("applied_jobs", []),
+        experience=doc.get("experience", []),
+        education=doc.get("education", []),
+        languages=doc.get("languages", []),
+        certifications=doc.get("certifications", []),
+        created_at=doc.get("created_at", datetime.utcnow().isoformat()),
+        avatar_color=doc.get("avatar_color", "#E8A020"),
+    )
+
+
 # ─────────────────────────────────────────────────────────────
-# CRUD
+# CRUD — all async
 # ─────────────────────────────────────────────────────────────
-def register_user(data: UserCreate) -> UserPublic:
-    email = str(data.email).lower().strip()
-    if email in _users:
+async def register_user(data: UserCreate) -> tuple[UserPublic, str]:
+    db = get_db()
+    email = data.email.lower().strip()
+    existing = await db.users.find_one({"email": email})
+    if existing:
         raise HTTPException(status_code=409, detail="Email already registered.")
     if len(data.password) < 6:
         raise HTTPException(status_code=422, detail="Password must be at least 6 characters.")
 
-    uid = str(uuid.uuid4())
     full_name = f"{data.first_name} {data.last_name}"
-    user = UserInDB(
-        id=uid,
-        first_name=data.first_name.strip(),
-        last_name=data.last_name.strip(),
-        email=email,
-        role=data.role,
-        bio="",
-        skills=[],
-        preferences={"type": "Full-time", "location": "Tunis", "domain": "Any", "salary": "Any"},
-        cv_filename=None,
-        saved_jobs=[],
-        applied_jobs=[],
-        experience=[],
-        created_at=datetime.utcnow().isoformat(),
-        avatar_color=_initials_color(full_name),
-        hashed_password=_hash(data.password),
+    doc = {
+        "first_name": data.first_name.strip(),
+        "last_name": data.last_name.strip(),
+        "email": email,
+        "role": data.role,
+        "bio": "",
+        "skills": [],
+        "preferences": {"type": "Full-time", "location": "Tunis", "domain": "Any", "salary": "Any"},
+        "cv_filename": None,
+        "saved_jobs": [],
+        "applied_jobs": [],
+        "experience": [],
+        "education": [],
+        "languages": [],
+        "certifications": [],
+        "created_at": datetime.utcnow().isoformat(),
+        "avatar_color": _initials_color(full_name),
+        "hashed_password": _hash(data.password),
+    }
+    result = await db.users.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    user = _doc_to_user(doc)
+    token = _create_token(str(result.inserted_id))
+    return user, token
+
+
+async def login_user(data: UserLogin) -> TokenResponse:
+    db = get_db()
+    email = data.email.lower().strip()
+    doc = await db.users.find_one({"email": email})
+    if not doc:
+        raise HTTPException(status_code=401, detail="No account found with that email address.")
+    if not _verify(data.password, doc["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Incorrect password.")
+    user = _doc_to_user(doc)
+    token = _create_token(str(doc["_id"]))
+    return TokenResponse(access_token=token, user=user)
+
+
+async def get_user_by_id(user_id: str) -> dict | None:
+    db = get_db()
+    try:
+        return await db.users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        return None
+
+
+async def update_user(user_id: str, data: UserUpdate) -> UserPublic:
+    db = get_db()
+    updates = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+    if not updates:
+        doc = await get_user_by_id(user_id)
+        return _doc_to_user(doc)
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": updates})
+    doc = await get_user_by_id(user_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return _doc_to_user(doc)
+
+
+async def update_user_cv_sections(user_id: str, sections: ProfileSection, skills: list[str]) -> UserPublic:
+    """Merge CV-extracted data into user profile without overwriting existing data"""
+    db = get_db()
+    doc = await get_user_by_id(user_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    updates: dict = {}
+
+    # Merge skills (deduplicate)
+    existing_skills = set(doc.get("skills", []))
+    merged_skills = list(existing_skills | set(skills))
+    updates["skills"] = merged_skills
+
+    # Only fill sections if currently empty
+    if sections.summary and not doc.get("bio"):
+        updates["bio"] = sections.summary
+    if sections.experience and not doc.get("experience"):
+        updates["experience"] = sections.experience
+    if sections.education and not doc.get("education"):
+        updates["education"] = sections.education
+    if sections.languages and not doc.get("languages"):
+        updates["languages"] = sections.languages
+    if sections.certifications and not doc.get("certifications"):
+        updates["certifications"] = sections.certifications
+
+    if updates:
+        await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": updates})
+
+    doc = await get_user_by_id(user_id)
+    return _doc_to_user(doc)
+
+
+async def save_job(user_id: str, job_id: str) -> list[str]:
+    db = get_db()
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$addToSet": {"saved_jobs": str(job_id)}}
     )
-    _users[email] = user
-    return UserPublic(**user.model_dump())
+    doc = await get_user_by_id(user_id)
+    return doc.get("saved_jobs", [])
 
 
-def login_user(data: UserLogin) -> TokenResponse:
-    # Normalize: try exact match first, then case-insensitive scan
-    email_key = str(data.email).lower().strip()
-    user = _users.get(email_key)
-
-    # Fallback: scan all users case-insensitively (handles pydantic EmailStr normalization)
-    if not user:
-        for stored_email, stored_user in _users.items():
-            if stored_email.lower() == email_key:
-                user = stored_user
-                break
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No account found with that email address.",
-        )
-
-    if not _verify(data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password.",
-        )
-
-    token = _create_token(user.id)
-    return TokenResponse(access_token=token, user=UserPublic(**user.model_dump()))
+async def unsave_job(user_id: str, job_id: str) -> list[str]:
+    db = get_db()
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$pull": {"saved_jobs": str(job_id)}}
+    )
+    doc = await get_user_by_id(user_id)
+    return doc.get("saved_jobs", [])
 
 
-def get_user_by_id(user_id: str) -> UserInDB | None:
-    for u in _users.values():
-        if u.id == user_id:
-            return u
-    return None
+async def mark_applied(user_id: str, job_id: str, cover_letter: str = "") -> list[str]:
+    db = get_db()
+    application = {
+        "job_id": str(job_id),
+        "cover_letter": cover_letter,
+        "applied_at": datetime.utcnow().isoformat(),
+    }
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {
+            "$addToSet": {"applied_jobs": str(job_id)},
+            "$push": {"applications": application},
+        }
+    )
+    doc = await get_user_by_id(user_id)
+    return doc.get("applied_jobs", [])
 
 
-def update_user(user_id: str, data: UserUpdate) -> UserPublic:
-    user = get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    updates = data.model_dump(exclude_none=True)
-    for k, v in updates.items():
-        setattr(user, k, v)
-    _users[user.email] = user
-    return UserPublic(**user.model_dump())
+async def set_cv(user_id: str, filename: str) -> UserPublic:
+    db = get_db()
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"cv_filename": filename}}
+    )
+    doc = await get_user_by_id(user_id)
+    return _doc_to_user(doc)
 
 
-def save_job(user_id: str, job_id: int) -> list[int]:
-    user = get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    if job_id not in user.saved_jobs:
-        user.saved_jobs.append(job_id)
-    return user.saved_jobs
-
-
-def unsave_job(user_id: str, job_id: int) -> list[int]:
-    user = get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    user.saved_jobs = [j for j in user.saved_jobs if j != job_id]
-    return user.saved_jobs
-
-
-def mark_applied(user_id: str, job_id: int) -> list[int]:
-    user = get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    if job_id not in user.applied_jobs:
-        user.applied_jobs.append(job_id)
-    return user.applied_jobs
-
-
-def set_cv(user_id: str, filename: str) -> UserPublic:
-    user = get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    user.cv_filename = filename
-    return UserPublic(**user.model_dump())
+async def delete_account(user_id: str):
+    db = get_db()
+    await db.users.delete_one({"_id": ObjectId(user_id)})
 
 
 # ─────────────────────────────────────────────────────────────
-# DEPENDENCY — current user from JWT
+# JWT DEPENDENCIES
 # ─────────────────────────────────────────────────────────────
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
     if not token:
@@ -236,10 +325,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
             raise ValueError
     except (JWTError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid or expired token.")
-    user = get_user_by_id(user_id)
-    if not user:
+    doc = await get_user_by_id(user_id)
+    if not doc:
         raise HTTPException(status_code=401, detail="User not found.")
-    return UserPublic(**user.model_dump())
+    return _doc_to_user(doc)
 
 
 async def get_optional_user(token: str = Depends(oauth2_scheme)) -> UserPublic | None:

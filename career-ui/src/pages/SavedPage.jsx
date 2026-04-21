@@ -1,45 +1,63 @@
-// src/pages/SavedPage.jsx
+// src/pages/SavedPage.jsx — live saved jobs from API
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { userAPI } from '../utils/api';
-import { Badge, Button, EmptyState } from '../components/ui';
-import { useState, useEffect } from 'react';
-
-const ALL_JOBS = [
-  { id: 1, title: 'Senior Data Engineer', company: 'Vermeg', domain: 'Data Engineering', location: 'Tunis, TN', type: 'Full-time', days_old: 8, freshness: 'fresh', score: .91, salary: '4,500–6,000 DT', logo: 'V' },
-  { id: 2, title: 'React Frontend Developer', company: 'Telnet', domain: 'Frontend Dev', location: 'Sfax, TN', type: 'Hybrid', days_old: 14, freshness: 'fresh', score: .87, salary: '2,800–3,800 DT', logo: 'T' },
-  { id: 3, title: 'ML Engineer', company: 'InstaDeep', domain: 'ML / AI', location: 'Remote', type: 'Remote', days_old: 5, freshness: 'fresh', score: .93, salary: '6,000–9,000 DT', logo: 'I' },
-  { id: 4, title: 'DevOps Engineer', company: 'Sofrecom', domain: 'DevOps', location: 'Tunis, TN', type: 'Full-time', days_old: 22, freshness: 'fresh', score: .79, salary: '3,500–5,000 DT', logo: 'S' },
-  { id: 5, title: 'Backend Engineer', company: 'Expensya', domain: 'Backend Dev', location: 'Tunis, TN', type: 'Hybrid', days_old: 35, freshness: 'aging', score: .82, salary: '3,200–4,500 DT', logo: 'E' },
-  { id: 6, title: 'Data Scientist', company: 'BIAT', domain: 'ML / AI', location: 'Tunis, TN', type: 'Full-time', days_old: 18, freshness: 'fresh', score: .85, salary: '3,800–5,200 DT', logo: 'B' },
-  { id: 7, title: 'UI/UX Designer', company: 'Axe Finance', domain: 'Design', location: 'Ariana, TN', type: 'Full-time', days_old: 10, freshness: 'fresh', score: .76, salary: '2,500–3,500 DT', logo: 'A' },
-  { id: 8, title: 'Cloud Architect', company: 'Ooredoo', domain: 'DevOps', location: 'Tunis, TN', type: 'Full-time', days_old: 65, freshness: 'expired', score: .74, salary: '6,500–9,000 DT', logo: 'O' },
-];
+import { userAPI, jobsAPI } from '../utils/api';
+import { Badge, Button, Spinner, EmptyState } from '../components/ui';
 
 const FRESHNESS_COLOR = { fresh: 'green', aging: 'gold', expired: 'red', unknown: 'gray' };
 
 export default function SavedPage({ onNavigate }) {
   const { user, updateUser } = useAuth();
-  const { push } = useToast();
-  const [savedSet, setSavedSet] = useState(new Set(user?.saved_jobs || []));
+  const { push }             = useToast();
 
-  useEffect(() => { if (user) setSavedSet(new Set(user.saved_jobs)); }, [user]);
+  const [jobs,    setJobs]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savedIds, setSavedIds] = useState(new Set());
 
-  const savedJobs = ALL_JOBS.filter(j => savedSet.has(j.id));
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    setSavedIds(new Set((user.saved_jobs || []).map(String)));
+    loadSavedJobs();
+  }, [user]);
+
+  const loadSavedJobs = async () => {
+    if (!user?.saved_jobs?.length) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      // Fetch each saved job by ID
+      const fetched = await Promise.allSettled(
+        (user.saved_jobs || []).map(id => jobsAPI.get(String(id)))
+      );
+      const valid = fetched
+        .filter(r => r.status === 'fulfilled')
+        .map(r => r.value);
+      setJobs(valid);
+    } catch (err) {
+      push('Failed to load saved jobs', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const removeSaved = async (jobId) => {
     try {
-      await userAPI.unsaveJob(jobId);
-      setSavedSet(prev => { const s = new Set(prev); s.delete(jobId); return s; });
-      updateUser({ saved_jobs: [...savedSet].filter(id => id !== jobId) });
+      const res = await userAPI.unsaveJob(String(jobId));
+      const newSavedIds = new Set(res.saved_jobs.map(String));
+      setSavedIds(newSavedIds);
+      setJobs(prev => prev.filter(j => newSavedIds.has(String(j.id))));
+      updateUser({ saved_jobs: res.saved_jobs });
       push('Job removed from saved', 'info');
-    } catch (err) { push(err.message, 'error'); }
+    } catch (err) {
+      push(err.message, 'error');
+    }
   };
 
   if (!user) {
     return (
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '60px 24px' }}>
-        <EmptyState icon="🔒" title="Sign in to see saved jobs" action={<Button onClick={() => onNavigate('auth-login')}>Sign In</Button>} />
+        <EmptyState icon="🔒" title="Sign in to see saved jobs"
+          action={<Button onClick={() => onNavigate('auth-login')}>Sign In</Button>} />
       </div>
     );
   }
@@ -54,19 +72,18 @@ export default function SavedPage({ onNavigate }) {
           display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 12px', borderRadius: 100,
           fontSize: 11, fontFamily: 'var(--f-mono)', background: 'var(--gold-dim)',
           color: 'var(--gold2)', border: '1px solid var(--gold-border)',
-        }}>{savedJobs.length} saved</span>
+        }}>{jobs.length} saved</span>
       </div>
 
-      {savedJobs.length === 0 ? (
-        <EmptyState
-          icon="☆"
-          title="No saved jobs yet"
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner /></div>
+      ) : jobs.length === 0 ? (
+        <EmptyState icon="☆" title="No saved jobs yet"
           description="Browse jobs and click ☆ to save your favourites here."
-          action={<Button onClick={() => onNavigate('jobs')}>Browse Jobs</Button>}
-        />
+          action={<Button onClick={() => onNavigate('jobs')}>Browse Jobs</Button>} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {savedJobs.map(job => (
+          {jobs.map(job => (
             <div key={job.id} style={{
               background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: 'var(--r)',
               padding: '20px 24px', transition: 'border-color .2s',
@@ -79,16 +96,23 @@ export default function SavedPage({ onNavigate }) {
                   <div style={{
                     width: 44, height: 44, borderRadius: 8, background: 'var(--gold-dim)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 16, fontWeight: 700, color: 'var(--gold2)', fontFamily: 'var(--f-mono)', flexShrink: 0,
-                  }}>{job.logo}</div>
+                    fontSize: 18, fontWeight: 700, color: 'var(--gold2)', fontFamily: 'var(--f-mono)', flexShrink: 0,
+                  }}>{(job.company || 'J').charAt(0).toUpperCase()}</div>
                   <div>
                     <div style={{ fontFamily: 'var(--f-display)', fontSize: 17, marginBottom: 2 }}>{job.title}</div>
                     <div style={{ fontSize: 13, color: 'var(--ivory3)' }}>{job.company} · {job.location}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <Button size="sm" variant="ghost" onClick={() => onNavigate('jobs')}>View Details →</Button>
-                  <Button size="sm" onClick={() => onNavigate('jobs')}>Apply Now</Button>
+                  {job.apply_url && (
+                    <a href={job.apply_url} target="_blank" rel="noreferrer" style={{
+                      display: 'inline-flex', alignItems: 'center', padding: '7px 14px',
+                      background: 'var(--gold)', border: 'none', borderRadius: 'var(--r-sm)',
+                      color: '#0A0C10', fontSize: 12, cursor: 'pointer',
+                      fontFamily: 'var(--f-ui)', fontWeight: 600, textDecoration: 'none',
+                    }}>Apply Now ↗</a>
+                  )}
                   <button onClick={() => removeSaved(job.id)} style={{
                     background: 'none', border: '1px solid rgba(240,96,96,.25)',
                     borderRadius: 'var(--r-sm)', padding: '7px 12px', color: 'var(--red)',
@@ -99,15 +123,29 @@ export default function SavedPage({ onNavigate }) {
                   >✕ Remove</button>
                 </div>
               </div>
+
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <Badge color={FRESHNESS_COLOR[job.freshness]}>{job.freshness} · {job.days_old}d ago</Badge>
-                <Badge color="gray">{job.type}</Badge>
                 <Badge color="gold">{job.domain}</Badge>
-                <Badge color="teal">💰 {job.salary}/mo</Badge>
-                <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--gold)' }}>
-                  {Math.round(job.score * 100)}% match
-                </span>
+                {job.days_old > 60 && <Badge color="red">⚠ May be closed</Badge>}
               </div>
+
+              {/* Show matched skills if user has skills */}
+              {user?.skills?.length > 0 && job.skills?.length > 0 && (
+                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {job.skills.slice(0, 8).map(s => {
+                    const matched = (user.skills || []).map(x => x.toLowerCase()).includes(s.toLowerCase());
+                    return (
+                      <span key={s} style={{
+                        padding: '3px 9px', borderRadius: 100, fontSize: 11, fontFamily: 'var(--f-mono)',
+                        background: matched ? 'var(--green-dim)' : 'var(--ink4)',
+                        border: `1px solid ${matched ? 'rgba(34,200,122,.2)' : 'var(--line)'}`,
+                        color: matched ? 'var(--green)' : 'var(--ivory2)',
+                      }}>{matched ? '✓ ' : ''}{s}</span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ))}
         </div>

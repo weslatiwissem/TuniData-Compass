@@ -10,10 +10,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      
+      - MONGO_URI=${MONGO_URI:-mongodb://localhost:27017}
+      - MONGO_DB=${MONGO_DB:-compass}
       - CSV_PATH=/app/data/jobs.csv
     volumes:
-      - ./backend/data:/app/data:ro
+      - ./recomendation_system/data:/app/data:ro
       - compass-uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
@@ -30,6 +32,8 @@ services:
     container_name: compass-frontend
     ports:
       - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
     restart: unless-stopped
