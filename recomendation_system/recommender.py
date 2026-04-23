@@ -93,8 +93,21 @@ class CareerRecommender:
             df["days_old"]        = 0
             df["freshness_label"] = "unknown"
             return df
-        df["post_date"] = pd.to_datetime(df["date"], format="%m/%d/%Y", errors="coerce")
-        df["days_old"]  = (TODAY - df["post_date"]).dt.days.fillna(9999).astype(int)
+
+        def parse_date(val):
+            if pd.isna(val) or str(val).strip() == "":
+                return pd.NaT
+            val = str(val).strip()
+            for fmt in ("%m/%d/%Y", "%d/%m/%y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%y"):
+                try:
+                    return pd.to_datetime(val, format=fmt)
+                except ValueError:
+                    continue
+            return pd.to_datetime(val, errors="coerce")
+
+        df["post_date"] = df["date"].apply(parse_date)
+        # Clamp negative days to 0 (future dates treated as today)
+        df["days_old"] = (TODAY - df["post_date"]).dt.days.fillna(9999).astype(int).clip(lower=0)
         df["freshness_label"] = df["days_old"].apply(
             lambda d: "fresh" if d <= 30 else ("aging" if d <= 60 else "expired")
         )
@@ -110,6 +123,7 @@ class CareerRecommender:
         return df
 
     def _consolidate_categories(self, df: pd.DataFrame, min_jobs: int = 10) -> pd.DataFrame:
+        df["final_category"] = df["final_category"].fillna("Other").astype(str)
         counts = df["final_category"].value_counts()
         rare   = counts[counts < min_jobs].index.tolist()
         df["domain"] = df["final_category"].apply(

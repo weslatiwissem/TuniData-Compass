@@ -38,5 +38,23 @@ services:
       - backend
     restart: unless-stopped
 
+  
+  # ── Scraper — runs every 2 days automatically ──────────────
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    container_name: compass-scraper
+    environment:
+      - CSV_PATH=/app/data/jobs.csv
+      - SEARCH_KEYWORDS=data engineer,data scientist,software engineer,devops,cybersecurity,frontend developer,backend developer,product manager
+      - SCRAPE_LOCATION=Tunisia
+      - MAX_JOBS_PER_RUN=150
+    volumes:
+      - ./recomendation_system/data:/app/data  # shared with backend, writable
+    restart: unless-stopped
+    depends_on:
+      - backend
+
 volumes:
   compass-uploads:

@@ -241,7 +241,8 @@ def list_jobs(
             "description": str(row.get("description", ""))[:400] if "description" in row.index else None,
         })
 
-    all_domains = sorted(engine.df["domain"].unique().tolist())
+    all_domains = sorted(engine.df["domain"].dropna().unique().astype(str).tolist())
+
     return JobsListResponse(jobs=jobs, total=total, page=page, pages=pages, domains=all_domains)
 
 
