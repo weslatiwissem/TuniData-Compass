@@ -20,7 +20,7 @@ export default function DiscoverPage({ onNavigate }) {
   const { user } = useAuth();
   const { push } = useToast();
 
-  const [inputMode, setInputMode] = useState('text');   // 'text' | 'paragraph' | 'cv'
+  const [inputMode, setInputMode] = useState('text');
   const [skills, setSkills] = useState([]);
   const [skillInput, setSkillInput] = useState('');
   const [paragraph, setParagraph] = useState('');
@@ -31,9 +31,9 @@ export default function DiscoverPage({ onNavigate }) {
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [heroSearch, setHeroSearch] = useState('');
+  const [cvRawText, setCvRawText] = useState('');   // kept for semantic embedding
   const fileRef = useRef();
 
-  // Add skill from tag input
   const addSkill = (val) => {
     const s = val.trim().toLowerCase().replace(/,/g, '');
     if (s && !skills.includes(s)) setSkills(p => [...p, s]);
@@ -42,35 +42,36 @@ export default function DiscoverPage({ onNavigate }) {
 
   const removeSkill = (s) => setSkills(p => p.filter(x => x !== s));
 
-  // Parse paragraph via API
   const parseParagraph = async () => {
     if (paragraph.trim().length < 20) { push('Please write at least 20 characters.', 'error'); return; }
     setParseLoading(true);
     try {
       const res = await recommenderAPI.parseText(paragraph);
       setSkills(res.extracted_skills);
+      setCvRawText(paragraph);   // use paragraph as semantic context
       push(`Extracted ${res.count} skills!`, 'success');
       setConfirming(true);
-    } catch (err) {
-      push(err.message, 'error');
-    } finally {
-      setParseLoading(false);
-    }
+    } catch (err) { push(err.message, 'error'); }
+    finally { setParseLoading(false); }
   };
 
-  // Parse CV via API
   const parseCV = async (file) => {
     setParseLoading(true);
     try {
       const res = await recommenderAPI.parseCV(file);
       setSkills(res.extracted_skills);
+      // Store profile sections text for semantic context
+      const ps = res.profile_sections || {};
+      const ctxParts = [
+        ps.summary,
+        (ps.experience || []).map(e => `${e.title} at ${e.company}: ${e.desc || ''}`).join(' '),
+        (ps.education  || []).map(e => e.degree).join(' '),
+      ].filter(Boolean);
+      setCvRawText(ctxParts.join('. '));
       push(`Extracted ${res.count} skills from your CV!`, 'success');
       setConfirming(true);
-    } catch (err) {
-      push(err.message, 'error');
-    } finally {
-      setParseLoading(false);
-    }
+    } catch (err) { push(err.message, 'error'); }
+    finally { setParseLoading(false); }
   };
 
   const handleCvDrop = (e) => {
@@ -84,30 +85,35 @@ export default function DiscoverPage({ onNavigate }) {
     if (f) { setCvFile(f); parseCV(f); }
   };
 
-  // Get recommendations
   const getRecommendations = async () => {
     if (!skills.length) { push('Please add at least one skill.', 'error'); return; }
     setLoading(true);
     try {
-      const res = await recommenderAPI.recommend(skills, 6);
+      // Pass extra semantic context if available
+      const extra = {};
+      if (cvRawText) extra.cv_text = cvRawText;
+      if (user?.bio)        extra.bio = user.bio;
+      if (user?.experience?.length) extra.experience = user.experience;
+
+      const res = await recommenderAPI.recommend(skills, 6, extra);
       setResults(res);
       setConfirming(false);
-      push('Recommendations ready!', 'success');
-    } catch (err) {
-      push(err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
+
+      const semanticMsg = res.semantic_enabled
+        ? 'Semantic AI matching active 🧠'
+        : 'Skill-based matching (no embeddings)';
+      push(`Recommendations ready! ${semanticMsg}`, 'success');
+    } catch (err) { push(err.message, 'error'); }
+    finally { setLoading(false); }
   };
 
   const fmt = (n) => `${(n * 100).toFixed(0)}%`;
-
   const FRESHNESS_COLOR = { fresh: 'green', aging: 'gold', expired: 'red', unknown: 'gray' };
 
   return (
     <div style={{ animation: 'fadeUp .35s ease' }}>
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
+      {/* ── Hero ── */}
       {!results && (
         <div style={{
           padding: '80px 28px 60px', maxWidth: 900, margin: '0 auto', textAlign: 'center',
@@ -132,19 +138,30 @@ export default function DiscoverPage({ onNavigate }) {
           </h1>
 
           <p style={{ color: 'var(--ivory2)', fontSize: 16, lineHeight: 1.7, maxWidth: 520, margin: '0 auto 36px' }}>
-            AI-powered matching connects your skills with the right opportunities in the Tunisian job market. Upload your CV, describe yourself, or type skills — get matched in seconds.
+            AI-powered semantic matching connects your full profile with the right opportunities.
+            Upload your CV — our engine understands <em>context</em>, not just keywords.
           </p>
+
+          {/* Semantic badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 36,
+            fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '1.5px',
+            color: 'var(--ivory3)', padding: '4px 12px',
+            border: '1px solid var(--line)', borderRadius: 100,
+          }}>
+            🧠 Semantic embedding search · ✨ AI-generated cover letters · ⚡ Real applications
+          </div>
 
           {/* Quick job search */}
           <div style={{
             background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: 'var(--r)',
             padding: '8px 8px 8px 20px', display: 'flex', alignItems: 'center', gap: 10,
-            maxWidth: 640, margin: '0 auto 48px', transition: 'border-color .18s, box-shadow .18s',
-          }}
-            onFocus={e => e.currentTarget.style.boxShadow = '0 0 0 4px var(--gold-dim)'}
-            onBlur={e => e.currentTarget.style.boxShadow = 'none'}
-          >
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="var(--ivory3)" strokeWidth="1.5" /><path d="M20 20l-3-3" stroke="var(--ivory3)" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            maxWidth: 640, margin: '0 auto 48px',
+          }}>
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7" stroke="var(--ivory3)" strokeWidth="1.5" />
+              <path d="M20 20l-3-3" stroke="var(--ivory3)" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
             <input
               value={heroSearch}
               onChange={e => setHeroSearch(e.target.value)}
@@ -155,7 +172,6 @@ export default function DiscoverPage({ onNavigate }) {
             <Button onClick={() => onNavigate('jobs', { search: heroSearch })}>Search Jobs</Button>
           </div>
 
-          {/* Stats */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 48, marginBottom: 60, flexWrap: 'wrap' }}>
             {[['1,062+', 'Live Jobs'], ['10', 'Domains'], ['287', 'Skills Tracked'], ['94%', 'Match Accuracy']].map(([n, l]) => (
               <div key={l} style={{ textAlign: 'center' }}>
@@ -167,13 +183,13 @@ export default function DiscoverPage({ onNavigate }) {
         </div>
       )}
 
-      {/* ── AI Skill Matcher ──────────────────────────────────── */}
+      {/* ── AI Skill Matcher ── */}
       <div style={{
         maxWidth: 860, margin: '0 auto', padding: '0 28px 60px',
         ...(results ? { paddingTop: 40 } : {}),
       }}>
         {results && (
-          <button onClick={() => { setResults(null); setSkills([]); setConfirming(false); }} style={{
+          <button onClick={() => { setResults(null); setSkills([]); setConfirming(false); setCvRawText(''); }} style={{
             background: 'none', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
             padding: '8px 16px', color: 'var(--ivory3)', fontSize: 13, cursor: 'pointer',
             fontFamily: 'var(--f-ui)', marginBottom: 24, transition: 'all .18s',
@@ -188,7 +204,7 @@ export default function DiscoverPage({ onNavigate }) {
               background: 'var(--ink3)', borderRadius: 'var(--r-sm)', padding: 3, marginBottom: 24,
             }}>
               {[['text', '⌨️', 'Type Skills'], ['paragraph', '✍️', 'Describe Yourself'], ['cv', '📄', 'Upload CV']].map(([id, icon, label]) => (
-                <button key={id} onClick={() => { setInputMode(id); setConfirming(false); }} style={{
+                <button key={id} onClick={() => { setInputMode(id); setConfirming(false); setCvRawText(''); }} style={{
                   padding: '10px 6px', borderRadius: 'calc(var(--r-sm) - 2px)',
                   background: inputMode === id ? 'var(--ink2)' : 'transparent',
                   border: inputMode === id ? '1px solid var(--line)' : '1px solid transparent',
@@ -229,6 +245,16 @@ export default function DiscoverPage({ onNavigate }) {
                     {skills.map(s => <Tag key={s} onRemove={() => removeSkill(s)}>{s}</Tag>)}
                   </div>
                 )}
+                {user?.bio && (
+                  <div style={{
+                    marginBottom: 16, padding: '10px 14px',
+                    background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.2)',
+                    borderRadius: 'var(--r-sm)', fontFamily: 'var(--f-mono)', fontSize: 11,
+                    color: 'var(--ivory3)',
+                  }}>
+                    🧠 Semantic context: your bio &amp; experience will enhance matching
+                  </div>
+                )}
                 <Button full size="lg" disabled={!skills.length} loading={loading} onClick={getRecommendations}>
                   {skills.length === 0 ? 'Add skills to continue' : `Find Matching Jobs · ${skills.length} skill${skills.length !== 1 ? 's' : ''} →`}
                 </Button>
@@ -245,7 +271,7 @@ export default function DiscoverPage({ onNavigate }) {
                   rows={5}
                   value={paragraph}
                   onChange={e => setParagraph(e.target.value)}
-                  placeholder={"Example: I'm a data engineer with 3 years of experience in Python, SQL, and Apache Spark. I've also worked with AWS, dbt, and built machine learning pipelines using scikit-learn and TensorFlow. Experienced with Docker and CI/CD workflows..."}
+                  placeholder={"Example: I'm a data engineer with 3 years of experience in Python, SQL, and Apache Spark. I've also worked with AWS, dbt, and built machine learning pipelines using scikit-learn and TensorFlow..."}
                   style={{
                     width: '100%', background: 'var(--ink3)', border: '1px solid var(--line)',
                     borderRadius: 'var(--r-sm)', padding: '14px 16px', color: 'var(--ivory)',
@@ -253,11 +279,12 @@ export default function DiscoverPage({ onNavigate }) {
                     lineHeight: 1.7, marginBottom: 10, minHeight: 130,
                   }}
                 />
-                <p style={{ fontSize: 11, color: 'var(--ivory3)', fontFamily: 'var(--f-mono)', marginBottom: 16 }}>
-                  Write naturally — our AI extracts your skills automatically. <strong>Minimum 20 characters.</strong>
-                </p>
+                <div style={{ fontSize: 11, color: 'var(--ivory3)', fontFamily: 'var(--f-mono)', marginBottom: 16 }}>
+                  ✍️ Your text is used for <strong>semantic matching</strong> — not just keywords.
+                  Minimum 20 characters.
+                </div>
                 <Button full size="lg" disabled={paragraph.trim().length < 20} loading={parseLoading} onClick={parseParagraph}>
-                  Extract Skills from Paragraph →
+                  Extract Skills &amp; Build Semantic Profile →
                 </Button>
               </div>
             )}
@@ -288,13 +315,13 @@ export default function DiscoverPage({ onNavigate }) {
                     }
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--ivory3)', fontFamily: 'var(--f-mono)' }}>
-                    {cvFile ? 'Click to change file' : 'PDF files only · Max 10MB'}
+                    {cvFile ? 'Click to change' : 'PDF only · Your experience will be semantically indexed'}
                   </div>
                   <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handleCvSelect} />
                 </div>
                 {parseLoading && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, color: 'var(--ivory2)', fontSize: 13 }}>
-                    <Spinner size={18} /> Extracting skills from CV...
+                    <Spinner size={18} /> Extracting skills &amp; building semantic profile…
                   </div>
                 )}
               </div>
@@ -308,7 +335,8 @@ export default function DiscoverPage({ onNavigate }) {
                   <div>
                     <div style={{ fontFamily: 'var(--f-display)', fontSize: 18 }}>Skills Extracted</div>
                     <div style={{ fontSize: 12, color: 'var(--ivory3)', fontFamily: 'var(--f-mono)' }}>
-                      {skills.length} skills found — remove false positives or add missing ones
+                      {skills.length} skills found
+                      {cvRawText && <span style={{ color: 'var(--blue)', marginLeft: 8 }}>· Semantic context ready 🧠</span>}
                     </div>
                   </div>
                 </div>
@@ -323,7 +351,6 @@ export default function DiscoverPage({ onNavigate }) {
                   }
                 </div>
 
-                {/* Add missing skill */}
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                   <input
                     value={skillInput}
@@ -350,13 +377,17 @@ export default function DiscoverPage({ onNavigate }) {
           </Card>
         )}
 
-        {/* ── Results ────────────────────────────────────────── */}
+        {/* ── Results ── */}
         {results && (
           <div style={{ animation: 'fadeUp .35s ease' }}>
-            {/* Header */}
             <div style={{ marginBottom: 28 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--gold)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--gold)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
                 — Career Analysis · {results.input_skills.length} skills
+                {results.semantic_enabled && (
+                  <span style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', color: 'var(--blue)', padding: '2px 8px', borderRadius: 4, fontSize: 9, letterSpacing: '1px' }}>
+                    🧠 SEMANTIC
+                  </span>
+                )}
               </div>
               <h1 style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(24px, 4vw, 36px)', letterSpacing: '-1px', marginBottom: 10 }}>
                 Best match: <em style={{ color: 'var(--gold)', fontStyle: 'italic' }}>{results.domain_ranking[0]?.domain}</em>
@@ -366,7 +397,7 @@ export default function DiscoverPage({ onNavigate }) {
               </div>
               {results.unknown_skills.length > 0 && (
                 <div style={{ marginTop: 12, background: 'rgba(245,200,66,.06)', border: '1px solid rgba(245,200,66,.2)', borderRadius: 'var(--r-sm)', padding: '10px 14px', fontSize: 12, color: 'var(--ivory2)', fontFamily: 'var(--f-mono)' }}>
-                  <span style={{ color: 'var(--yellow)' }}>⚠ Skipped:</span> {results.unknown_skills.join(', ')} — not in job data
+                  <span style={{ color: 'var(--yellow)' }}>⚠ Skipped:</span> {results.unknown_skills.join(', ')}
                 </div>
               )}
             </div>
@@ -397,9 +428,9 @@ export default function DiscoverPage({ onNavigate }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {results.top_jobs.map((job, i) => (
                 <div key={i} style={{
-                  background: 'var(--ink2)', border: `1px solid ${i === 0 ? 'var(--gold-border)' : 'var(--line)'}`,
-                  borderRadius: 'var(--r)', padding: 20,
                   background: i === 0 ? 'linear-gradient(135deg, var(--ink2), rgba(232,160,32,.04))' : 'var(--ink2)',
+                  border: `1px solid ${i === 0 ? 'var(--gold-border)' : 'var(--line)'}`,
+                  borderRadius: 'var(--r)', padding: 20,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
                     <div>
@@ -414,7 +445,12 @@ export default function DiscoverPage({ onNavigate }) {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 12 }}>
-                    {[['Overall', job.score, 'var(--gold)'], ['Skill Match', job.job_match, 'var(--green)'], ['Domain Fit', job.domain_fit, 'var(--blue)']].map(([label, val, color]) => (
+                    {[
+                      ['Overall', job.score, 'var(--gold)'],
+                      ['Skill Match', job.job_match, 'var(--green)'],
+                      ['Semantic', job.semantic_score || 0, 'var(--blue)'],
+                      ['Domain Fit', job.domain_fit, 'var(--teal)'],
+                    ].map(([label, val, color]) => (
                       <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ivory3)', width: 80, flexShrink: 0 }}>{label}</span>
                         <ProgressBar value={val * 100} color={color} />
@@ -438,7 +474,7 @@ export default function DiscoverPage({ onNavigate }) {
         )}
       </div>
 
-      {/* ── Domain tiles ─────────────────────────────────────── */}
+      {/* ── Domain tiles ── */}
       {!results && (
         <>
           <div style={{ background: 'var(--ink2)', borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)', padding: '40px 28px' }}>
@@ -465,13 +501,12 @@ export default function DiscoverPage({ onNavigate }) {
             </div>
           </div>
 
-          {/* CTA */}
           {!user && (
             <div style={{ background: 'linear-gradient(135deg, var(--ink2), rgba(232,160,32,.05))', borderTop: '1px solid var(--gold-border)', padding: '60px 28px', textAlign: 'center' }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--gold)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>AI-Powered Matching</div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--gold)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>AI-Powered Semantic Matching</div>
               <h2 style={{ fontFamily: 'var(--f-display)', fontSize: 30, marginBottom: 12 }}>Let AI find your perfect role</h2>
               <p style={{ color: 'var(--ivory2)', marginBottom: 28, maxWidth: 460, margin: '0 auto 28px' }}>
-                Create a free account to save jobs, track applications, and get personalised AI recommendations.
+                Create a free account to get AI-generated cover letters, track applications, and semantic job matching.
               </p>
               <Button size="lg" onClick={() => onNavigate('auth-register')}>Get Started Free →</Button>
             </div>

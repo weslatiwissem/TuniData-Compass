@@ -44,16 +44,22 @@ export const userAPI = {
   },
   saveJob:   (jobId)               => request('POST',   '/users/me/save-job', { job_id: String(jobId) }),
   unsaveJob: (jobId)               => request('DELETE', `/users/me/save-job/${jobId}`),
-  applyJob:  (jobId, coverLetter)  => request('POST',   '/users/me/apply', { job_id: String(jobId), cover_letter: coverLetter }),
+  applyJob: (jobId, coverLetter, autoGenerate = false) =>
+    request('POST', '/users/me/apply', {
+      job_id: String(jobId),
+      cover_letter: coverLetter || '',
+      auto_generate: autoGenerate,
+    }),
 };
 
 // ── Jobs Browse ────────────────────────────────────────────────
 export const jobsAPI = {
-  list: ({ search = '', domain = '', freshness = '', page = 1, perPage = 20 } = {}) => {
+  list: ({ search = '', domain = '', freshness = '', page = 1, perPage = 20, semanticQuery = '' } = {}) => {
     const params = new URLSearchParams();
-    if (search)    params.set('search',   search);
-    if (domain)    params.set('domain',   domain);
-    if (freshness) params.set('freshness', freshness);
+    if (search)        params.set('search',        search);
+    if (domain)        params.set('domain',         domain);
+    if (freshness)     params.set('freshness',      freshness);
+    if (semanticQuery) params.set('semantic_query', semanticQuery);
     params.set('page',     String(page));
     params.set('per_page', String(perPage));
     return request('GET', `/jobs?${params}`);
@@ -61,9 +67,33 @@ export const jobsAPI = {
   get: (id) => request('GET', `/jobs/${id}`),
 };
 
+// ── Cover Letter ───────────────────────────────────────────────
+export const coverLetterAPI = {
+  generate: (jobId, userSkills = null) =>
+    request('POST', '/cover-letter/generate', {
+      job_id: String(jobId),
+      user_skills: userSkills,
+    }),
+
+  // Returns an EventSource for streaming
+  stream: (jobId, userSkills = null) => {
+    const token = getToken();
+    // POST body via fetch + ReadableStream
+    return fetch(`${BASE}/cover-letter/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ job_id: String(jobId), user_skills: userSkills }),
+    });
+  },
+};
+
 // ── Recommender ────────────────────────────────────────────────
 export const recommenderAPI = {
-  recommend:     (skills, topN = 6)           => request('POST', '/recommend',      { skills, top_n: topN }),
+  recommend: (skills, topN = 6, extra = {}) =>
+    request('POST', '/recommend', { skills, top_n: topN, ...extra }),
   missingSkills: (skills, domain, topN = 10)  => request('POST', '/missing-skills', { skills, domain, top_n: topN }),
   domains:       ()                           => request('GET',  '/domains'),
   parseText: (text) => request('POST', '/parse-text', { text }),

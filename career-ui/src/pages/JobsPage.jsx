@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { jobsAPI, userAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Badge, Button, Spinner, Modal, Textarea } from '../components/ui';
+import { Badge, Button, Spinner } from '../components/ui';
+import ApplyModal from '../components/ApplyModal';
 
 const FRESHNESS_COLOR = { fresh: 'green', aging: 'gold', expired: 'red', unknown: 'gray' };
 const LOGO_COLORS = ['#E8A020', '#22C87A', '#3B82F6', '#2DD4BF', '#a78bfa', '#fb923c', '#f472b6', '#f87171'];
@@ -45,8 +46,6 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
   const [savedSet,   setSavedSet]   = useState(new Set());
   const [appliedSet, setAppliedSet] = useState(new Set());
   const [applyModal, setApplyModal] = useState(false);
-  const [coverLetter, setCoverLetter] = useState('');
-  const [applying,   setApplying]   = useState(false);
 
   const searchTimeout = useRef(null);
 
@@ -73,7 +72,6 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
       setTotal(res.total);
       setPages(res.pages);
       setDomains(res.domains);
-      // Auto-select first job
       if (res.jobs.length && !selected) {
         setSelected(res.jobs[0]);
       }
@@ -86,7 +84,6 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
 
   useEffect(() => { loadJobs(); }, []);
 
-  // Debounced search
   const handleSearch = (val) => {
     setSearch(val);
     setPage(1);
@@ -109,7 +106,6 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
     loadJobs({ search: '', domain: '', freshness: '', page: 1 });
   };
 
-  // Load full job detail when selected
   const selectJob = async (job) => {
     setSelected(job);
     if (!job.skills) {
@@ -140,18 +136,12 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
     } catch (err) { push(err.message, 'error'); }
   };
 
-  const handleApply = async () => {
-    if (!user) { push('Sign in to apply', 'error'); return; }
-    setApplying(true);
-    try {
-      const res = await userAPI.applyJob(selected.id, coverLetter);
+  const handleApplied = (res) => {
+    if (res?.applied_jobs) {
       setAppliedSet(new Set(res.applied_jobs.map(String)));
       updateUser({ applied_jobs: res.applied_jobs });
-      setApplyModal(false);
-      setCoverLetter('');
-      push(`Application sent to ${selected.company}! 🚀`, 'success');
-    } catch (err) { push(err.message, 'error'); }
-    finally { setApplying(false); }
+    }
+    setApplyModal(false);
   };
 
   const hasFilters = search || filterDomain || filterFresh;
@@ -261,7 +251,6 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
                 );
               })}
 
-              {/* Pagination */}
               {pages > 1 && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '16px 12px', borderTop: '1px solid var(--line)' }}>
                   <button disabled={page <= 1} onClick={() => { const p = page - 1; setPage(p); loadJobs({ page: p }); }}
@@ -374,33 +363,14 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
         </div>
       </div>
 
-      {/* Apply Modal */}
-      <Modal open={applyModal} onClose={() => setApplyModal(false)} title={`Apply — ${selected?.title}`} width={520}>
-        {selected && (
-          <div>
-            <div style={{ display: 'flex', gap: 12, padding: 14, background: 'var(--ink3)', borderRadius: 'var(--r-sm)', marginBottom: 20 }}>
-              <div style={{ fontSize: 20, fontWeight: 700, width: 38, height: 38, borderRadius: 8, background: 'var(--gold-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold2)', fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
-                {(selected.company || 'J').charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{selected.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--ivory3)' }}>{selected.company} · {selected.location}</div>
-              </div>
-              <Badge color={FRESHNESS_COLOR[selected.freshness]} style={{ marginLeft: 'auto' }}>{selected.freshness}</Badge>
-            </div>
-            <Textarea label="Cover Letter (optional)" rows={5} value={coverLetter}
-              onChange={e => setCoverLetter(e.target.value)}
-              placeholder={`Dear ${selected.company} team,\n\nI'm excited to apply for the ${selected.title} position...`}
-              style={{ marginBottom: 16 }} />
-            {user?.cv_filename && (
-              <div style={{ fontSize: 12, color: 'var(--green)', fontFamily: 'var(--f-mono)', marginBottom: 12 }}>
-                ✓ Your CV will be attached: {user.cv_filename}
-              </div>
-            )}
-            <Button full size="lg" loading={applying} onClick={handleApply}>Submit Application →</Button>
-          </div>
-        )}
-      </Modal>
+      {/* AI Apply Modal */}
+      <ApplyModal
+        open={applyModal}
+        onClose={() => setApplyModal(false)}
+        job={selected}
+        user={user}
+        onApplied={handleApplied}
+      />
     </div>
   );
 }

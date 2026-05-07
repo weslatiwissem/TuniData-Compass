@@ -10,12 +10,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      
       - MONGO_URI=${MONGO_URI:-mongodb://localhost:27017}
       - MONGO_DB=${MONGO_DB:-compass}
       - CSV_PATH=/app/data/jobs.csv
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
-      - ./recomendation_system/data:/app/data:ro
+      - ./recomendation_system/data:/app/data
       - compass-uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
@@ -37,24 +37,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
-  
-  # ── Scraper — runs every 2 days automatically ──────────────
-  scraper:
-    build:
-      context: ./scraper
-      dockerfile: Dockerfile
-    container_name: compass-scraper
-    environment:
-      - CSV_PATH=/app/data/jobs.csv
-      - SEARCH_KEYWORDS=data engineer,data scientist,software engineer,devops,cybersecurity,frontend developer,backend developer,product manager
-      - SCRAPE_LOCATION=Tunisia
-      - MAX_JOBS_PER_RUN=150
-    volumes:
-      - ./recomendation_system/data:/app/data  # shared with backend, writable
-    restart: unless-stopped
-    depends_on:
-      - backend
 
 volumes:
   compass-uploads:

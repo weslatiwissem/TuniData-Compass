@@ -30,12 +30,15 @@ export default function DashboardPage({ onNavigate }) {
 
     // Load AI recommendations if user has skills
     if (user?.skills?.length > 0) {
-      setRecosLoading(true);
-      recommenderAPI.recommend(user.skills, 4)
-        .then(res => setRecos(res.top_jobs || []))
-        .catch(() => {})
-        .finally(() => setRecosLoading(false));
-    }
+  setRecosLoading(true);
+  const extra = {};
+  if (user.bio)                extra.bio        = user.bio;
+  if (user.experience?.length) extra.experience = user.experience;
+  recommenderAPI.recommend(user.skills, 4, extra)
+    .then(res => setRecos(res.top_jobs || []))
+    .catch(() => {})
+    .finally(() => setRecosLoading(false));
+}
   }, []);
 
   if (!user) return null;
