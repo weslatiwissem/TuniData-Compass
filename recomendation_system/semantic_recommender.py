@@ -159,20 +159,25 @@ class SemanticRecommender:
         df["num_skills"] = df["skills_list"].apply(len)
         return df
 
-    def _consolidate_categories(self, df: pd.DataFrame, min_jobs: int = 10) -> pd.DataFrame:
+    def _consolidate_categories(self, df: pd.DataFrame, min_jobs: int = 3) -> pd.DataFrame:
         from collections import Counter
         # Fill NaN final_category to avoid float comparisons
-        df["final_category"] = df["final_category"].fillna("Other").astype(str).str.strip()
+        df["final_category"] = df["final_category"].fillna("Software Engineering").astype(str).str.strip()
+        # Replace blank / nan strings with default domain
+        df["final_category"] = df["final_category"].apply(
+            lambda x: "Software Engineering" if (x == "" or x.lower() in ("nan", "other", "none")) else x
+        )
         counts = df["final_category"].value_counts()
+        # Merge truly rare categories into the nearest meaningful bucket
+        # instead of dropping them entirely
         rare = counts[counts < min_jobs].index.tolist()
         df["domain"] = df["final_category"].apply(
-            lambda x: "Other" if (x in rare or x == "" or x.lower() == "nan") else x
+            lambda x: "Software Engineering" if x in rare else x
         )
-        df = df[df["domain"] != "Other"].reset_index(drop=True)
-        # Ensure domain column has no NaN/float values
-        df["domain"] = df["domain"].fillna("Other").astype(str)
-        df = df[df["domain"] != "Other"].reset_index(drop=True)
-        return df
+        # Ensure no NaN/float values remain
+        df["domain"] = df["domain"].fillna("Software Engineering").astype(str)
+        # Never drop rows — just reassign rare domains
+        return df.reset_index(drop=True)
 
     def _build_tfidf_vocab(self, df: pd.DataFrame):
         """Build vocabulary for validate_skills compatibility."""

@@ -266,7 +266,8 @@ def list_jobs(
             "days_old": int(row.get("days_old", 0)),
             "skills": list(row.get("skills_list", [])),
             "apply_url": str(row[link_col]) if link_col else None,
-            "description": str(row.get("description", ""))[:400]
+            # Full description — frontend handles display truncation
+            "description": str(row.get("description", ""))
                            if "description" in row.index else None,
         })
 
@@ -303,7 +304,8 @@ def get_job(job_id: str):
         "days_old": int(row.get("days_old", 0)),
         "skills": list(row.get("skills_list", [])),
         "apply_url": str(row[link_col]) if link_col else None,
-        "description": str(row.get("description", ""))[:2000]
+        # Full description — no truncation
+        "description": str(row.get("description", ""))
                        if "description" in row.index else None,
     }
 

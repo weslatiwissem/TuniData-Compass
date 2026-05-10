@@ -23,6 +23,37 @@ function SkillBadge({ skill, matched }) {
   );
 }
 
+/** Render description text preserving line-breaks and paragraphs */
+function DescriptionText({ text }) {
+  if (!text || text.trim() === '' || text === 'None' || text === 'nan') {
+    return (
+      <p style={{ color: 'var(--ivory3)', fontSize: 14, fontStyle: 'italic' }}>
+        No description available for this position.
+      </p>
+    );
+  }
+
+  // Split into paragraphs on double newline, or every ~300 chars for readability
+  const paragraphs = text
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {paragraphs.map((para, i) => (
+        <p key={i} style={{
+          color: 'var(--ivory2)', fontSize: 14, lineHeight: 1.8,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        }}>
+          {para}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
   const { user, updateUser } = useAuth();
   const { push } = useToast();
@@ -108,14 +139,13 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
 
   const selectJob = async (job) => {
     setSelected(job);
-    if (!job.skills) {
-      setDetailLoading(true);
-      try {
-        const full = await jobsAPI.get(job.id);
-        setSelected(full);
-      } catch {}
-      setDetailLoading(false);
-    }
+    // Always fetch full detail to get the complete description
+    setDetailLoading(true);
+    try {
+      const full = await jobsAPI.get(job.id);
+      setSelected(full);
+    } catch {}
+    setDetailLoading(false);
   };
 
   const toggleSave = async (jobId) => {
@@ -264,7 +294,7 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
           )}
         </div>
 
-        {/* Job detail */}
+        {/* ── Job detail panel ── */}
         <div style={{ overflowY: 'auto', height: 'calc(100vh - 130px)', padding: 24 }}>
           {detailLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner /></div>
@@ -275,7 +305,8 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
             </div>
           ) : (
             <div style={{ animation: 'fadeUp .25s ease' }}>
-              {/* Header card */}
+
+              {/* ── Header card ── */}
               <div style={{
                 background: 'linear-gradient(135deg, var(--ink2), rgba(232,160,32,.04))',
                 border: '1px solid var(--gold-border)', borderRadius: 'var(--r)', padding: 28, marginBottom: 16,
@@ -333,18 +364,28 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
                 </div>
               </div>
 
-              {/* Description */}
-              {selected.description && (
-                <div style={{ background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: 24, marginBottom: 14 }}>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12 }}>About the Role</div>
-                  <p style={{ color: 'var(--ivory2)', fontSize: 14, lineHeight: 1.8 }}>{selected.description}</p>
-                </div>
-              )}
+              {/* ── About the Role — full description ── */}
+              <div style={{
+                background: 'var(--ink2)', border: '1px solid var(--line)',
+                borderRadius: 'var(--r)', padding: 24, marginBottom: 14,
+              }}>
+                <div style={{
+                  fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: 2,
+                  textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 16,
+                }}>About the Role</div>
+                <DescriptionText text={selected.description} />
+              </div>
 
-              {/* Skills */}
+              {/* ── Required Skills ── */}
               {(selected.skills?.length > 0) && (
-                <div style={{ background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: 24 }}>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12 }}>Required Skills</div>
+                <div style={{
+                  background: 'var(--ink2)', border: '1px solid var(--line)',
+                  borderRadius: 'var(--r)', padding: 24,
+                }}>
+                  <div style={{
+                    fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: 2,
+                    textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12,
+                  }}>Required Skills</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {selected.skills.map(s => {
                       const userSkills = new Set((user?.skills || []).map(x => x.toLowerCase()));
