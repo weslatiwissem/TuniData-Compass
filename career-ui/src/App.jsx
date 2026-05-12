@@ -7,7 +7,7 @@ import DiscoverPage from './pages/DiscoverPage';
 import JobsPage from './pages/JobsPage';
 import AuthPage from './pages/AuthPage';
 import ProfilePage from './pages/ProfilePage';
-import DashboardPage from './pages/DashboardPage';
+import UserDashboardPage from './pages/UserDashboardPage';
 import SavedPage from './pages/SavedPage';
 import './App.css';
 
@@ -16,7 +16,6 @@ function Router() {
   const [page, setPage] = useState('discover');
   const [pageParams, setPageParams] = useState({});
 
-  // Redirect to dashboard as soon as user becomes authenticated
   useEffect(() => {
     if (user && page === 'auth') {
       setPage('dashboard');
@@ -54,9 +53,15 @@ function Router() {
       {page === 'discover'  && <DiscoverPage onNavigate={navigate} />}
       {page === 'jobs'      && <JobsPage initialSearch={pageParams.search||''} initialDomain={pageParams.domain||''} />}
       {page === 'auth'      && <AuthPage initialTab={pageParams.tab||'login'} onSuccess={() => setPage('dashboard')} />}
-      {page === 'profile'   && (user ? <ProfilePage onNavigate={navigate} /> : <AuthPage initialTab="login" onSuccess={() => setPage('profile')} />)}
-      {page === 'dashboard' && (user ? <DashboardPage onNavigate={navigate} /> : <AuthPage initialTab="login" onSuccess={() => setPage('dashboard')} />)}
-      {page === 'saved'     && <SavedPage onNavigate={navigate} />}
+
+      {page === 'dashboard' && (
+        user
+          ? <UserDashboardPage onNavigate={navigate} />
+          : <AuthPage initialTab="login" onSuccess={() => setPage('dashboard')} />
+      )}
+
+      {page === 'profile' && (user ? <ProfilePage onNavigate={navigate} /> : <AuthPage initialTab="login" onSuccess={() => setPage('profile')} />)}
+      {page === 'saved'   && <SavedPage onNavigate={navigate} />}
     </div>
   );
 }

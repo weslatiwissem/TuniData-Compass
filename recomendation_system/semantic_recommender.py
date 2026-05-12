@@ -1,7 +1,7 @@
 # ============================================================
 # semantic_recommender.py
-# Embedding-based career recommender using sentence-transformers
-# Replaces TF-IDF with semantic similarity on job descriptions + CV
+# FAST STARTUP: embeddings load lazily in background thread.
+# App is ready to serve in ~2s (TF-IDF fallback while SBERT loads).
 # ============================================================
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import ast
 import warnings
 import os
 import pickle
+import threading
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -21,9 +22,9 @@ try:
     SBERT_AVAILABLE = True
 except ImportError:
     SBERT_AVAILABLE = False
-    print("WARNING: sentence-transformers not installed. Falling back to TF-IDF.")
+    print("WARNING: sentence-transformers not installed. Using TF-IDF only.")
 
-# ── Skill Aliases (kept for validate_skills compat) ──────────
+# ── Skill Aliases ─────────────────────────────────────────────
 SKILL_ALIASES = {
     "ml": "machine learning",
     "ci/cd": "ci cd",
@@ -34,7 +35,7 @@ SKILL_ALIASES = {
 }
 
 EMBEDDING_CACHE_FILE = "embeddings_cache.pkl"
-MODEL_NAME = "all-MiniLM-L6-v2"  # Fast, good quality, 384-dim
+MODEL_NAME = "all-MiniLM-L6-v2"
 
 
 def normalize_skill(raw: str) -> tuple[str, str | None]:
@@ -45,23 +46,13 @@ def normalize_skill(raw: str) -> tuple[str, str | None]:
 
 
 def _build_job_document(row: pd.Series) -> str:
-    """Build a rich text document for a job, combining all available fields.
-    
-    The document is structured to maximise semantic similarity with user profiles:
-    skills are repeated for emphasis, domain context is explicit.
-    """
     parts = []
-
     title = str(row.get("title", "")).strip()
     if title and title != "nan":
-        # Repeat title for emphasis — it's the strongest signal
         parts.append(f"Position: {title}. Role: {title}")
-
     domain = str(row.get("domain", "")).strip()
     if domain and domain not in ("nan", "Other"):
         parts.append(f"Field: {domain}")
-
-    # Skills list — the core matching signal
     skills = row.get("skills_list", [])
     if isinstance(skills, str):
         try:
@@ -70,31 +61,29 @@ def _build_job_document(row: pd.Series) -> str:
             skills = [s.strip() for s in skills.split(",") if s.strip()]
     if skills:
         skill_str = ", ".join(skills)
-        # Repeat skills section to boost weight in cosine similarity
         parts.append(f"Required skills: {skill_str}")
         parts.append(f"Technologies: {skill_str}")
-
     company = str(row.get("company", "")).strip()
     if company and company != "nan":
         parts.append(f"Company: {company}")
-
     location = str(row.get("location", "")).strip()
     if location and location != "nan":
         parts.append(f"Location: {location}")
-
-    # Description — use full content if available
     desc = str(row.get("description", "")).strip()
     if desc and desc not in ("nan", "None", ""):
         parts.append(f"Job description: {desc[:800]}")
-
     return ". ".join(parts)
 
 
 class SemanticRecommender:
     """
-    Embedding-based career recommender.
-    Uses sentence-transformers to encode job descriptions and user CVs/skills
-    for semantic similarity matching.
+    Embedding-based career recommender with FAST STARTUP.
+
+    Strategy:
+    - On init, build TF-IDF matrices immediately (< 2 seconds).
+    - Load/build SBERT embeddings in a background thread.
+    - All endpoints work immediately via TF-IDF fallback.
+    - Once background thread finishes, semantic scoring activates automatically.
     """
 
     def __init__(self, csv_path: str, cache_dir: str = None):
@@ -104,15 +93,20 @@ class SemanticRecommender:
         self.domain_embeddings = None
         self.domain_names = None
         self.model = None
+        self._embedding_ready = False
+        self._embedding_lock = threading.Lock()
         self.cache_dir = cache_dir or os.path.dirname(os.path.abspath(csv_path))
-        
-        # Keep a TF-IDF vectorizer for validate_skills compatibility
+
+        # TF-IDF fallback (always available)
         self._tfidf_vocab = set()
-        
+        self._tfidf_vectorizer = None
+        self._tfidf_job_matrix = None
+        self._tfidf_domain_matrix = None
+
         self._build(csv_path)
 
     def _build(self, csv_path: str):
-        print("Building semantic recommendation engine...")
+        print("Building recommendation engine (fast startup mode)...")
         df = pd.read_csv(csv_path)
         print(f"  Loaded {len(df)} jobs, {df['final_category'].nunique()} categories")
 
@@ -126,15 +120,61 @@ class SemanticRecommender:
         )
 
         self.df = df
-        self._build_tfidf_vocab(df)
+        self._build_tfidf(df)          # ~1-2 seconds, blocking
         self._build_domain_profiles(df)
 
+        print("  ✓ TF-IDF ready — app is accepting requests.")
+
         if SBERT_AVAILABLE:
-            self._load_or_build_embeddings(df)
+            # Check if valid cache exists — if yes, load synchronously (fast)
+            cache_path = self._get_cache_path()
+            if self._is_cache_valid(cache_path, df):
+                print("  Valid embedding cache found — loading synchronously...")
+                self._load_embeddings_from_cache(cache_path)
+            else:
+                # Build in background so startup isn't blocked
+                print("  Starting background embedding thread...")
+                t = threading.Thread(target=self._background_embed, args=(df,), daemon=True)
+                t.start()
         else:
-            print("  SBERT unavailable — semantic features disabled.")
+            print("  SBERT unavailable — TF-IDF only mode.")
 
         print("Engine ready.")
+
+    # ── TF-IDF (fast fallback) ────────────────────────────────
+
+    def _build_tfidf(self, df: pd.DataFrame):
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+
+        print("  Building TF-IDF matrices...")
+        skill_strings = df["skills_list"].apply(lambda x: " ".join(x) if x else "")
+
+        vec = TfidfVectorizer(
+            analyzer="word",
+            token_pattern=r"[^\s]+",
+            min_df=3,
+            max_df=0.95,
+            sublinear_tf=True,
+        )
+        self._tfidf_job_matrix = vec.fit_transform(skill_strings)
+        self._tfidf_vectorizer = vec
+        self._tfidf_vocab = set(vec.vocabulary_.keys())
+
+        # Domain docs
+        domain_docs = []
+        for domain in (self.domain_names or []):
+            top = self.domain_top_skills.get(domain, [])
+            max_c = top[0][1] if top else 1
+            tokens = []
+            for skill, count in top:
+                tokens.extend([skill] * max(1, round(6 * count / max_c)))
+            domain_docs.append(" ".join(tokens))
+
+        if domain_docs:
+            self._tfidf_domain_matrix = vec.transform(domain_docs)
+
+        print(f"  TF-IDF vocab: {len(self._tfidf_vocab)} tokens, {self._tfidf_job_matrix.shape} job matrix")
 
     def _parse_dates(self, df: pd.DataFrame) -> pd.DataFrame:
         TODAY = pd.Timestamp.today().normalize()
@@ -160,39 +200,22 @@ class SemanticRecommender:
         return df
 
     def _consolidate_categories(self, df: pd.DataFrame, min_jobs: int = 3) -> pd.DataFrame:
-        from collections import Counter
-        # Fill NaN final_category to avoid float comparisons
         df["final_category"] = df["final_category"].fillna("Software Engineering").astype(str).str.strip()
-        # Replace blank / nan strings with default domain
         df["final_category"] = df["final_category"].apply(
             lambda x: "Software Engineering" if (x == "" or x.lower() in ("nan", "other", "none")) else x
         )
         counts = df["final_category"].value_counts()
-        # Merge truly rare categories into the nearest meaningful bucket
-        # instead of dropping them entirely
         rare = counts[counts < min_jobs].index.tolist()
         df["domain"] = df["final_category"].apply(
             lambda x: "Software Engineering" if x in rare else x
         )
-        # Ensure no NaN/float values remain
         df["domain"] = df["domain"].fillna("Software Engineering").astype(str)
-        # Never drop rows — just reassign rare domains
         return df.reset_index(drop=True)
-
-    def _build_tfidf_vocab(self, df: pd.DataFrame):
-        """Build vocabulary for validate_skills compatibility."""
-        all_skills = set()
-        for skills in df["skills_list"]:
-            for s in skills:
-                all_skills.add(s.lower())
-                # Add individual tokens too
-                for tok in s.split():
-                    all_skills.add(tok.lower())
-        self._tfidf_vocab = all_skills
 
     def _build_domain_profiles(self, df: pd.DataFrame):
         from collections import Counter
         self.domain_top_skills = {}
+        self.domain_names = sorted(df["domain"].unique().tolist())
         domain_sizes = df.groupby("domain").size()
         for domain, group in df.groupby("domain"):
             all_skills = []
@@ -203,15 +226,14 @@ class SemanticRecommender:
             min_count = max(2, round(n_jobs * 0.10))
             filtered = [(s, c) for s, c in counts.most_common() if c >= min_count]
             self.domain_top_skills[domain] = filtered
-        self.domain_names = list(self.domain_top_skills.keys())
+
+    # ── Embedding cache helpers ───────────────────────────────
 
     def _get_cache_path(self) -> Path:
         return Path(self.cache_dir) / EMBEDDING_CACHE_FILE
 
     def _csv_mtime(self) -> float:
-        """Return the modification time of the source CSV (used as cache key)."""
         try:
-            # Walk up from cache_dir to find the jobs.csv
             csv_candidates = list(Path(self.cache_dir).glob("*.csv"))
             if csv_candidates:
                 return max(p.stat().st_mtime for p in csv_candidates)
@@ -219,105 +241,106 @@ class SemanticRecommender:
             pass
         return 0.0
 
-    def _load_or_build_embeddings(self, df: pd.DataFrame):
-        cache_path = self._get_cache_path()
-        csv_mtime = self._csv_mtime()
-
-        # Try loading cached embeddings
-        if cache_path.exists():
-            try:
-                print("  Loading cached embeddings...")
-                with open(cache_path, "rb") as f:
-                    cache = pickle.load(f)
-                cache_valid = (
-                    cache.get("n_jobs") == len(df) and
-                    cache.get("model") == MODEL_NAME and
-                    abs(cache.get("csv_mtime", 0) - csv_mtime) < 1.0  # 1-second tolerance
-                )
-                if cache_valid:
-                    self.job_embeddings = cache["job_embeddings"]
-                    self.domain_embeddings = cache["domain_embeddings"]
-                    self.model = SentenceTransformer(MODEL_NAME)
-                    print(f"  Loaded embeddings from cache ({len(df)} jobs).")
-                    return
-                else:
-                    print("  Cache stale (data changed), rebuilding embeddings...")
-            except Exception as e:
-                print(f"  Cache load failed: {e}")
-
-        print(f"  Loading model: {MODEL_NAME}...")
-        self.model = SentenceTransformer(MODEL_NAME)
-
-        # Build job documents
-        print("  Building job documents...")
-        job_docs = [_build_job_document(row) for _, row in df.iterrows()]
-
-        print(f"  Encoding {len(job_docs)} jobs (this takes ~1-2 min first time)...")
-        self.job_embeddings = self.model.encode(
-            job_docs,
-            batch_size=64,
-            show_progress_bar=True,
-            normalize_embeddings=True,
-        )
-
-        # Build domain documents
-        print("  Encoding domain profiles...")
-        domain_docs = []
-        for domain in self.domain_names:
-            top_skills = self.domain_top_skills.get(domain, [])
-            domain_jobs = df[df["domain"] == domain]
-            # Combine domain name + top skills + sample job titles
-            skill_text = ", ".join([s for s, _ in top_skills[:20]])
-            sample_titles = " | ".join(domain_jobs["title"].head(10).tolist())
-            domain_doc = f"Domain: {domain}. Key skills: {skill_text}. Example roles: {sample_titles}"
-            domain_docs.append(domain_doc)
-
-        self.domain_embeddings = self.model.encode(
-            domain_docs,
-            normalize_embeddings=True,
-        )
-
-        # Cache embeddings
-        print("  Caching embeddings...")
+    def _is_cache_valid(self, cache_path: Path, df: pd.DataFrame) -> bool:
+        if not cache_path.exists():
+            return False
         try:
-            with open(cache_path, "wb") as f:
-                pickle.dump({
-                    "n_jobs": len(df),
-                    "model": MODEL_NAME,
-                    "csv_mtime": csv_mtime,
-                    "job_embeddings": self.job_embeddings,
-                    "domain_embeddings": self.domain_embeddings,
-                }, f)
-            print(f"  Embeddings cached to {cache_path}")
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+            return (
+                cache.get("n_jobs") == len(df) and
+                cache.get("model") == MODEL_NAME and
+                abs(cache.get("csv_mtime", 0) - self._csv_mtime()) < 1.0
+            )
+        except Exception:
+            return False
+
+    def _load_embeddings_from_cache(self, cache_path: Path):
+        try:
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+            with self._embedding_lock:
+                self.job_embeddings = cache["job_embeddings"]
+                self.domain_embeddings = cache["domain_embeddings"]
+                self.model = SentenceTransformer(MODEL_NAME)
+                self._embedding_ready = True
+            print(f"  ✓ Embeddings loaded from cache ({cache['n_jobs']} jobs). Semantic search ACTIVE.")
         except Exception as e:
-            print(f"  Cache save failed: {e}")
+            print(f"  Cache load failed: {e}")
+
+    def _background_embed(self, df: pd.DataFrame):
+        """Runs in a daemon thread — builds and caches embeddings without blocking startup."""
+        try:
+            print("  [BG] Loading SBERT model...")
+            model = SentenceTransformer(MODEL_NAME)
+
+            print(f"  [BG] Encoding {len(df)} jobs...")
+            job_docs = [_build_job_document(row) for _, row in df.iterrows()]
+            job_embeddings = model.encode(
+                job_docs,
+                batch_size=128,        # larger batch = faster
+                show_progress_bar=False,
+                normalize_embeddings=True,
+            )
+
+            print("  [BG] Encoding domain profiles...")
+            domain_docs = []
+            for domain in self.domain_names:
+                top_skills = self.domain_top_skills.get(domain, [])
+                domain_jobs = df[df["domain"] == domain]
+                skill_text = ", ".join([s for s, _ in top_skills[:20]])
+                sample_titles = " | ".join(domain_jobs["title"].head(10).tolist())
+                domain_docs.append(f"Domain: {domain}. Key skills: {skill_text}. Example roles: {sample_titles}")
+
+            domain_embeddings = model.encode(domain_docs, normalize_embeddings=True)
+
+            # Cache to disk
+            cache_path = self._get_cache_path()
+            try:
+                with open(cache_path, "wb") as f:
+                    pickle.dump({
+                        "n_jobs": len(df),
+                        "model": MODEL_NAME,
+                        "csv_mtime": self._csv_mtime(),
+                        "job_embeddings": job_embeddings,
+                        "domain_embeddings": domain_embeddings,
+                    }, f)
+                print(f"  [BG] Embeddings cached to {cache_path}")
+            except Exception as e:
+                print(f"  [BG] Cache save failed: {e}")
+
+            # Atomically enable semantic features
+            with self._embedding_lock:
+                self.model = model
+                self.job_embeddings = job_embeddings
+                self.domain_embeddings = domain_embeddings
+                self._embedding_ready = True
+            print("  [BG] ✓ Semantic search ACTIVE.")
+
+        except Exception as e:
+            print(f"  [BG] Embedding failed: {e}")
 
     # ── Public API ────────────────────────────────────────────
 
-    def encode_query(self, text: str) -> np.ndarray:
-        """Encode a user query (skills text or CV text) into embedding."""
-        if not SBERT_AVAILABLE or self.model is None:
+    @property
+    def semantic_ready(self) -> bool:
+        return self._embedding_ready
+
+    def encode_query(self, text: str) -> np.ndarray | None:
+        if not self._embedding_ready or self.model is None:
             return None
         return self.model.encode([text], normalize_embeddings=True)[0]
 
     def encode_user_profile(self, skills: list[str], cv_text: str = None,
-                             bio: str = None, experience: list[dict] = None) -> np.ndarray:
-        """
-        Build a rich user profile embedding from all available user data.
-        Skills are weighted heavily; experience and bio provide semantic context.
-        """
+                             bio: str = None, experience: list[dict] = None) -> np.ndarray | None:
         parts = []
-
         if skills:
             skill_str = ", ".join(skills)
-            # Repeat skills for stronger embedding signal
             parts.append(f"My skills: {skill_str}")
             parts.append(f"I am proficient in: {skill_str}")
             parts.append(f"Technical expertise: {skill_str}")
-
         if bio and len(bio) > 20:
             parts.append(f"About me: {bio}")
-
         if experience:
             exp_texts = []
             for exp in experience[:4]:
@@ -329,16 +352,11 @@ class SemanticRecommender:
                 exp_texts.append(exp_str)
             if exp_texts:
                 parts.append(f"Work experience: {' | '.join(exp_texts)}")
-
         if cv_text and len(cv_text) > 50:
-            # Use a larger chunk of CV for richer context
             parts.append(f"CV: {cv_text[:1500]}")
-
         if not parts:
             return None
-
-        query = ". ".join(parts)
-        return self.encode_query(query)
+        return self.encode_query(". ".join(parts))
 
     def is_skill_known(self, skill: str) -> bool:
         tokens = skill.lower().split()
@@ -358,10 +376,9 @@ class SemanticRecommender:
 
     def rank_domains(self, user_skills: list[str],
                      user_embedding: np.ndarray = None) -> list[dict]:
-        """Rank domains using embeddings if available, else skill overlap."""
-        if self.domain_embeddings is not None and user_embedding is not None:
+        # Use semantic if ready
+        if self._embedding_ready and self.domain_embeddings is not None and user_embedding is not None:
             sims = self.domain_embeddings @ user_embedding
-            # Normalise to [0, 1] so scores are interpretable
             d_min, d_max = sims.min(), sims.max()
             if d_max > d_min:
                 sims_norm = (sims - d_min) / (d_max - d_min)
@@ -371,7 +388,15 @@ class SemanticRecommender:
                             key=lambda x: x[1], reverse=True)
             return [{"domain": d, "score": round(float(s), 4)} for d, s in ranked]
 
-        # Fallback: skill overlap scoring
+        # TF-IDF fallback
+        if self._tfidf_vectorizer is not None and self._tfidf_domain_matrix is not None:
+            from sklearn.metrics.pairwise import cosine_similarity
+            user_vec = self._tfidf_vectorizer.transform([" ".join(user_skills)])
+            sims = cosine_similarity(user_vec, self._tfidf_domain_matrix).flatten()
+            ranked = sorted(zip(self.domain_names, sims), key=lambda x: x[1], reverse=True)
+            return [{"domain": d, "score": round(float(s), 4)} for d, s in ranked]
+
+        # Skill overlap fallback
         user_set = set(s.lower() for s in user_skills)
         scores = []
         for domain in self.domain_names:
@@ -382,7 +407,6 @@ class SemanticRecommender:
             max_count = top[0][1]
             overlap = sum(c / max_count for s, c in top[:20] if s in user_set)
             scores.append(overlap / max(1, len(top[:20])))
-
         ranked = sorted(zip(self.domain_names, scores), key=lambda x: x[1], reverse=True)
         return [{"domain": d, "score": round(float(s), 4)} for d, s in ranked]
 
@@ -406,49 +430,39 @@ class SemanticRecommender:
                        semantic_weight: float = 0.45,
                        domain_weight: float = 0.15,
                        top_n: int = 6) -> list[dict]:
-        """
-        Hybrid scorer combining skill overlap + semantic similarity + domain fit.
-
-        Weights (when embeddings available):
-          40% skill overlap  — exact keyword match, fast & reliable
-          45% semantic sim   — embedding cosine similarity, catches paraphrasing
-          15% domain fit     — domain-level embedding similarity
-
-        Without embeddings: 65% skill + 35% domain.
-        """
         n = len(self.df)
-
-        # ── Skill overlap scores ──────────────────────────────
         user_set = set(s.lower() for s in user_skills)
+
+        # Skill overlap scores
         skill_scores = np.zeros(n)
         for i, skills in enumerate(self.df["skills_list"]):
             if not skills:
                 continue
             overlap = sum(1 for s in skills if s.lower() in user_set)
-            # Jaccard-like: overlap / union to avoid rewarding huge skill lists
             union = len(set(skills) | user_set)
-            skill_scores[i] = overlap / max(1, union) * 2  # scale back up
+            skill_scores[i] = overlap / max(1, union) * 2
 
-        # ── Semantic embedding scores ─────────────────────────
+        # Semantic scores (if ready)
         sem_scores = np.zeros(n)
-        if self.job_embeddings is not None and user_embedding is not None:
-            raw_sims = self.job_embeddings @ user_embedding  # cosine (normalised)
-            # Soft-normalise: map to [0,1] using the 5th-95th percentile range
-            # so outliers don't crush the useful signal
+        if self._embedding_ready and self.job_embeddings is not None and user_embedding is not None:
+            raw_sims = self.job_embeddings @ user_embedding
             p5, p95 = np.percentile(raw_sims, 5), np.percentile(raw_sims, 95)
             if p95 > p5:
                 sem_scores = np.clip((raw_sims - p5) / (p95 - p5), 0.0, 1.0)
             else:
                 sem_scores = raw_sims.clip(0, 1)
 
-        # ── Domain scores ─────────────────────────────────────
+        # Domain scores
         domain_idx_map = {name: i for i, name in enumerate(self.domain_names)}
-        if self.domain_embeddings is not None and user_embedding is not None:
+        if self._embedding_ready and self.domain_embeddings is not None and user_embedding is not None:
             domain_sims = self.domain_embeddings @ user_embedding
-            # Normalise domain sims to [0,1]
             d_min, d_max = domain_sims.min(), domain_sims.max()
             if d_max > d_min:
                 domain_sims = (domain_sims - d_min) / (d_max - d_min)
+        elif self._tfidf_vectorizer is not None and self._tfidf_domain_matrix is not None:
+            from sklearn.metrics.pairwise import cosine_similarity
+            user_vec = self._tfidf_vectorizer.transform([" ".join(user_skills)])
+            domain_sims = cosine_similarity(user_vec, self._tfidf_domain_matrix).flatten()
         else:
             domain_sims = np.array([
                 sum(1 for s, _ in self.domain_top_skills.get(d, [])[:15] if s in user_set) /
@@ -461,15 +475,14 @@ class SemanticRecommender:
             for d in self.df["domain"]
         ])
 
-        # ── Combine ───────────────────────────────────────────
-        if self.job_embeddings is not None and user_embedding is not None:
+        # Combine — adjust weights if semantic not ready
+        if self._embedding_ready and user_embedding is not None:
             combined = (job_weight * skill_scores +
                         semantic_weight * sem_scores +
                         domain_weight * job_domain_scores)
         else:
             combined = 0.65 * skill_scores + 0.35 * job_domain_scores
 
-        # Take a generous pool; freshness sort below will trim to top_n
         top_indices = np.argsort(combined)[::-1][:top_n * 15]
 
         results = []
@@ -478,7 +491,6 @@ class SemanticRecommender:
             job = self.df.iloc[idx]
             freshness = job.get("freshness_label", "unknown")
             days_old = int(job.get("days_old", 0))
-
             dedup_key = (str(job.get("title", "")), str(job.get("company", "")))
             if dedup_key in seen:
                 continue
@@ -501,7 +513,7 @@ class SemanticRecommender:
                 None,
             )
 
-            semantic_score = float(sem_scores[idx]) if self.job_embeddings is not None else 0.0
+            semantic_score = float(sem_scores[idx]) if self._embedding_ready else 0.0
 
             results.append({
                 "title": str(job.get("title", "N/A")),
@@ -536,22 +548,22 @@ class SemanticRecommender:
 
         user_set = set(s.lower() for s in user_skills)
 
-        if self.job_embeddings is not None and user_embedding is not None:
+        if self._embedding_ready and self.job_embeddings is not None and user_embedding is not None:
             fresh_embs = self.job_embeddings[fresh_idx]
             sem_sims = fresh_embs @ user_embedding
-            # Also compute skill overlap for hybrid score
             skill_sims = np.array([
                 sum(1 for s in self.df.iloc[i]["skills_list"] if s.lower() in user_set) /
                 max(1, len(self.df.iloc[i]["skills_list"]))
                 for i in fresh_idx
             ])
-            # Normalise semantic
             p5, p95 = np.percentile(sem_sims, 5), np.percentile(sem_sims, 95)
-            if p95 > p5:
-                sem_norm = np.clip((sem_sims - p5) / (p95 - p5), 0.0, 1.0)
-            else:
-                sem_norm = sem_sims.clip(0, 1)
+            sem_norm = np.clip((sem_sims - p5) / (p95 - p5), 0.0, 1.0) if p95 > p5 else sem_sims.clip(0, 1)
             sims = 0.55 * sem_norm + 0.45 * skill_sims
+        elif self._tfidf_vectorizer is not None:
+            from sklearn.metrics.pairwise import cosine_similarity
+            user_vec = self._tfidf_vectorizer.transform([" ".join(user_skills)])
+            fresh_mat = self._tfidf_job_matrix[fresh_idx]
+            sims = cosine_similarity(user_vec, fresh_mat).flatten()
         else:
             sims = np.array([
                 sum(1 for s in self.df.iloc[i]["skills_list"] if s.lower() in user_set) /
@@ -584,10 +596,8 @@ class SemanticRecommender:
     def list_domains(self) -> list[str]:
         return sorted(self.domain_names)
 
-    # ── Kept for legacy compatibility ─────────────────────────
     @property
     def skill_vectorizer(self):
-        """Compatibility shim for code that checks skill_vectorizer.vocabulary_"""
         class FakeVectorizer:
             def __init__(self, vocab):
                 self.vocabulary_ = {s: i for i, s in enumerate(vocab)}

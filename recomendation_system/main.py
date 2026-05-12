@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import  os
 import uuid
 import math
 from contextlib import asynccontextmanager
@@ -21,6 +21,7 @@ from auth import (
     save_job, unsave_job, mark_applied, set_cv, delete_account,
     get_current_user, get_optional_user, init_db, get_user_by_id,
 )
+import sys as _sys, os as _os
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
@@ -35,16 +36,41 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 engine: SemanticRecommender | None = None
 
 
+_SCRAPER_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "scraper")
+if _os.path.isdir(_SCRAPER_DIR):
+    _sys.path.insert(0, _SCRAPER_DIR)
+ 
+ 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global engine
+ 
+    # ── 1. Connect to MongoDB ──────────────────────────────
     init_db(MONGO_URI, MONGO_DB)
     print(f"Connected to MongoDB: {MONGO_DB}")
+ 
+    # ── 2. Load recommendation engine ─────────────────────
     print(f"Loading semantic engine from: {CSV_PATH}")
     engine = SemanticRecommender(CSV_PATH, cache_dir=os.path.join(BASE_DIR, "data"))
+ 
+    # ── 3. Start background scraper (non-blocking) ─────────
+    #    The scraper will fire ~2 minutes after startup so the
+    #    API is fully ready before we hit external sites.
+    try:
+        from scheduler import start_scheduler
+        start_scheduler()
+        print("Background scraper scheduler started.")
+    except ImportError:
+        print("Scraper package not found — scraping disabled. "
+              "Run scraper/scheduler.py separately if needed.")
+    except Exception as exc:
+        # Never let scraper issues prevent the API from starting
+        print(f"WARNING: Could not start scraper scheduler: {exc}")
+ 
+    # ── API is now ready to serve requests ─────────────────
     yield
+ 
     print("Shutting down.")
-
 
 # ─────────────────────────────────────────────────────────────
 # APP
