@@ -38,13 +38,12 @@ function IconBriefcase()  { return <svg width="20" height="20" fill="none" viewB
 function IconSearch()     { return <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M20 20l-3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>; }
 function IconRefresh()    { return <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M4 4v5h5M20 20v-5h-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L4 10M3.51 15a9 9 0 0014.85 3.36L20 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>; }
 function IconArrowRight() { return <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
-function IconStar()       { return <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>; }
 function IconUpload()     { return <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 function IconFile()       { return <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>; }
 function IconKeyboard()   { return <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8M6 14h.01M18 14h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>; }
 function IconEdit()       { return <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 function IconSparkle()    { return <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>; }
-function IconNews()       { return <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h8M4 18h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/></svg>; }
+function IconCheckCircle(){ return <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 
 // ── Domain icon mapper ────────────────────────────────────────────────────────
 function getDomainIcon(name) {
@@ -141,7 +140,7 @@ function Skeleton({ w = '100%', h = 20, r = 6, style = {} }) {
   );
 }
 
-// ── Section wrapper (matches UserDashboard Section) ────────────────────────────
+// ── Section wrapper ────────────────────────────────────────────────────────────
 function Section({ label, title, action, children, style = {} }) {
   return (
     <div style={{ marginBottom: 36, ...style }}>
@@ -220,10 +219,8 @@ function DomainCard({ d, onNavigate, index }) {
         animation: `fadeUp .4s ease ${index * 55}ms both`,
       }}
     >
-      {/* Top accent */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${d.color}, transparent)` }} />
 
-      {/* Freshness chip */}
       {d.freshCount > 0 && (
         <div style={{ position: 'absolute', top: 14, right: 14 }}>
           <span style={{
@@ -234,7 +231,6 @@ function DomainCard({ d, onNavigate, index }) {
         </div>
       )}
 
-      {/* Icon + title */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
         <div style={{
           width: 40, height: 40, borderRadius: 'var(--r-sm)',
@@ -252,13 +248,11 @@ function DomainCard({ d, onNavigate, index }) {
         </div>
       </div>
 
-      {/* Progress bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <AnimBar value={pct} color={d.color} delay={200} />
         <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: d.color, fontWeight: 700, whiteSpace: 'nowrap' }}>{pct}%</span>
       </div>
 
-      {/* Top skills */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: expanded ? 12 : 0 }}>
         {(d.topSkills || []).slice(0, expanded ? 8 : 3).map(s => (
           <span key={s} style={{
@@ -274,7 +268,6 @@ function DomainCard({ d, onNavigate, index }) {
         )}
       </div>
 
-      {/* Expanded CTA */}
       {expanded && (
         <button
           onClick={e => { e.stopPropagation(); onNavigate('jobs', { domain: d.name }); }}
@@ -386,7 +379,6 @@ function SkillInputPanel({ onSearch, loading }) {
       borderRadius: 'var(--r-lg)', overflow: 'hidden',
       boxShadow: 'var(--shadow-sm)',
     }}>
-      {/* Accent top */}
       <div style={{ height: 3, background: 'linear-gradient(90deg, var(--blue-500), var(--blue-400), transparent)' }} />
 
       <div style={{ padding: '24px 28px' }}>
@@ -397,7 +389,7 @@ function SkillInputPanel({ onSearch, loading }) {
           padding: 3, marginBottom: 22,
         }}>
           {MODES.map(({ id, icon, label }) => (
-            <button key={id} onClick={() => setMode(id)} style={{
+            <button key={id} onClick={() => { setMode(id); setSkills([]); }} style={{
               padding: '9px 6px', borderRadius: 'calc(var(--r-sm) - 2px)',
               background: mode === id ? 'var(--surface-0)' : 'transparent',
               border: mode === id ? '1px solid var(--border)' : '1px solid transparent',
@@ -412,7 +404,7 @@ function SkillInputPanel({ onSearch, loading }) {
           ))}
         </div>
 
-        {/* Manual mode */}
+        {/* ── Manual mode ── */}
         {mode === 'manual' && (
           <div>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--blue-600)', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Your Skills</div>
@@ -470,7 +462,7 @@ function SkillInputPanel({ onSearch, loading }) {
           </div>
         )}
 
-        {/* Paragraph mode */}
+        {/* ── Paragraph mode ── */}
         {mode === 'paragraph' && (
           <div>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--blue-600)', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Describe Your Experience</div>
@@ -484,62 +476,177 @@ function SkillInputPanel({ onSearch, loading }) {
                 lineHeight: 1.7, marginBottom: 10,
               }}
             />
+
+            {/* Extracted skills preview for paragraph mode */}
+            {!parseLoading && skills.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Extracted Skills
+                </div>
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 5, padding: '10px 12px',
+                  background: 'var(--surface-1)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--r-sm)', maxHeight: 100, overflowY: 'auto',
+                }}>
+                  {skills.map(s => (
+                    <span key={s} style={{
+                      background: 'rgba(14,165,114,.1)', border: '1px solid rgba(14,165,114,.22)',
+                      color: 'var(--emerald)', fontSize: 11, padding: '2px 9px',
+                      borderRadius: 100, fontFamily: 'var(--f-mono)', fontWeight: 500,
+                    }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--f-mono)', marginBottom: 14, lineHeight: 1.6 }}>
               Uses semantic matching — understands context, not just keywords. Minimum 20 characters.
             </p>
-            <button
-              onClick={parseParagraph}
-              disabled={paragraph.trim().length < 20 || parseLoading}
-              style={{
-                width: '100%', padding: '12px', borderRadius: 'var(--r-sm)', border: 'none',
-                background: paragraph.trim().length >= 20 ? 'var(--blue-500)' : 'var(--surface-3)',
-                color: paragraph.trim().length >= 20 ? '#fff' : 'var(--text-faint)',
-                fontFamily: 'var(--f-ui)', fontSize: 14, fontWeight: 600,
-                cursor: paragraph.trim().length >= 20 ? 'pointer' : 'not-allowed',
-              }}
-              onMouseEnter={e => { if (paragraph.trim().length >= 20) e.currentTarget.style.background = 'var(--blue-600)'; }}
-              onMouseLeave={e => { if (paragraph.trim().length >= 20) e.currentTarget.style.background = 'var(--blue-500)'; }}
-            >
-              {parseLoading ? 'Extracting Skills...' : 'Extract Skills & Build Profile'}
-            </button>
+
+            {/* Show Extract or Find Jobs depending on state */}
+            {skills.length === 0 ? (
+              <button
+                onClick={parseParagraph}
+                disabled={paragraph.trim().length < 20 || parseLoading}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 'var(--r-sm)', border: 'none',
+                  background: paragraph.trim().length >= 20 ? 'var(--blue-500)' : 'var(--surface-3)',
+                  color: paragraph.trim().length >= 20 ? '#fff' : 'var(--text-faint)',
+                  fontFamily: 'var(--f-ui)', fontSize: 14, fontWeight: 600,
+                  cursor: paragraph.trim().length >= 20 ? 'pointer' : 'not-allowed',
+                }}
+                onMouseEnter={e => { if (paragraph.trim().length >= 20) e.currentTarget.style.background = 'var(--blue-600)'; }}
+                onMouseLeave={e => { if (paragraph.trim().length >= 20) e.currentTarget.style.background = 'var(--blue-500)'; }}
+              >
+                {parseLoading ? 'Extracting Skills...' : 'Extract Skills & Build Profile'}
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => { setSkills([]); }}
+                  style={{
+                    padding: '12px 16px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)',
+                    background: 'var(--surface-1)', color: 'var(--text-secondary)',
+                    fontFamily: 'var(--f-ui)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                  }}
+                >Re-extract</button>
+                <button
+                  onClick={() => onSearch(skills)}
+                  disabled={loading}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: 'var(--r-sm)', border: 'none',
+                    background: 'var(--blue-500)', color: '#fff',
+                    fontFamily: 'var(--f-ui)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--blue-600)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--blue-500)'}
+                >
+                  {loading ? 'Matching...' : `Find Matching Jobs · ${skills.length} skills`}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* CV mode */}
+        {/* ── CV mode ── */}
         {mode === 'cv' && (
           <div>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--blue-600)', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Upload Your CV</div>
+
+            {/* Drop zone */}
             <div
               onDragOver={e => { e.preventDefault(); setCvDrag(true); }}
               onDragLeave={() => setCvDrag(false)}
-              onDrop={e => { e.preventDefault(); setCvDrag(false); const f = e.dataTransfer.files[0]; if (f) { setCvFile(f); parseCV(f); } }}
+              onDrop={e => {
+                e.preventDefault(); setCvDrag(false);
+                const f = e.dataTransfer.files[0];
+                if (f) { setCvFile(f); setSkills([]); parseCV(f); }
+              }}
               onClick={() => fileRef.current.click()}
               style={{
-                border: `1.5px dashed ${cvDrag ? 'var(--blue-500)' : 'var(--border-med)'}`,
+                border: `1.5px dashed ${cvDrag ? 'var(--blue-500)' : skills.length > 0 ? 'var(--emerald)' : 'var(--border-med)'}`,
                 borderRadius: 'var(--r-sm)',
-                background: cvDrag ? 'var(--blue-50)' : 'var(--surface-1)',
-                padding: '36px 20px', textAlign: 'center', cursor: 'pointer',
+                background: cvDrag ? 'var(--blue-50)' : skills.length > 0 ? 'rgba(14,165,114,.04)' : 'var(--surface-1)',
+                padding: '24px 20px', textAlign: 'center', cursor: 'pointer',
                 transition: 'all .2s', marginBottom: 12,
               }}
             >
-              <div style={{ color: cvFile ? 'var(--blue-500)' : 'var(--text-faint)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
-                {cvFile ? <IconFile /> : <IconUpload />}
+              <div style={{
+                color: skills.length > 0 ? 'var(--emerald)' : cvFile ? 'var(--blue-500)' : 'var(--text-faint)',
+                marginBottom: 8, display: 'flex', justifyContent: 'center',
+              }}>
+                {skills.length > 0 ? <IconCheckCircle /> : cvFile ? <IconFile /> : <IconUpload />}
               </div>
-              <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4, fontWeight: 500 }}>
-                {cvFile
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 3, fontWeight: 500 }}>
+                {skills.length > 0
+                  ? <span style={{ color: 'var(--emerald)', fontWeight: 600 }}>{skills.length} skills extracted from {cvFile?.name}</span>
+                  : cvFile
                   ? <span style={{ color: 'var(--blue-600)' }}>{cvFile.name}</span>
                   : <><span>Drop your PDF here</span> or <span style={{ color: 'var(--blue-500)' }}>browse</span></>}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--f-mono)' }}>
-                {cvFile ? 'Click to change' : 'PDF only · Skills extracted automatically'}
+                {skills.length > 0 ? 'Click to upload a different file' : cvFile ? 'Parsing...' : 'PDF only · Skills extracted automatically'}
               </div>
-              <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files[0]; if (f) { setCvFile(f); parseCV(f); } }} />
+              <input
+                ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files[0]; if (f) { setCvFile(f); setSkills([]); parseCV(f); } }}
+              />
             </div>
+
+            {/* Parsing spinner */}
             {parseLoading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)', fontSize: 13 }}>
-                <Spinner size={16} /> Extracting skills from CV...
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12, padding: '10px 14px', background: 'var(--blue-50)', border: '1px solid var(--blue-200)', borderRadius: 'var(--r-sm)' }}>
+                <Spinner size={16} />
+                <span>Extracting skills from your CV...</span>
               </div>
             )}
+
+            {/* Extracted skills preview */}
+            {!parseLoading && skills.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Extracted Skills ({skills.length})</span>
+                </div>
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 5, padding: '10px 12px',
+                  background: 'rgba(14,165,114,.04)', border: '1px solid rgba(14,165,114,.2)',
+                  borderRadius: 'var(--r-sm)', maxHeight: 120, overflowY: 'auto',
+                }}>
+                  {skills.map(s => (
+                    <span key={s} style={{
+                      background: 'rgba(14,165,114,.1)', border: '1px solid rgba(14,165,114,.25)',
+                      color: 'var(--emerald)', fontSize: 11, padding: '3px 10px',
+                      borderRadius: 100, fontFamily: 'var(--f-mono)', fontWeight: 500,
+                    }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* CTA — changes based on state */}
+            <button
+              onClick={() => skills.length && !parseLoading && onSearch(skills)}
+              disabled={!skills.length || loading || parseLoading}
+              style={{
+                width: '100%', padding: '12px', borderRadius: 'var(--r-sm)', border: 'none',
+                background: skills.length && !parseLoading ? 'var(--blue-500)' : 'var(--surface-3)',
+                color: skills.length && !parseLoading ? '#fff' : 'var(--text-faint)',
+                fontFamily: 'var(--f-ui)', fontSize: 14, fontWeight: 600,
+                cursor: skills.length && !parseLoading ? 'pointer' : 'not-allowed',
+                transition: 'all .2s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+              onMouseEnter={e => { if (skills.length && !parseLoading) e.currentTarget.style.background = 'var(--blue-600)'; }}
+              onMouseLeave={e => { if (skills.length && !parseLoading) e.currentTarget.style.background = 'var(--blue-500)'; }}
+            >
+              {loading
+                ? <><Spinner size={16} /> Matching Jobs...</>
+                : parseLoading
+                ? 'Extracting skills...'
+                : skills.length
+                ? `Find Matching Jobs · ${skills.length} skill${skills.length !== 1 ? 's' : ''}`
+                : 'Upload a CV to continue'}
+            </button>
           </div>
         )}
       </div>
@@ -569,14 +676,12 @@ export default function DiscoverPage({ onNavigate }) {
 
   const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-  // ── Fetch market stats ─────────────────────────────────────────────────
   useEffect(() => {
     statsAPI.market()
       .then(data => { setMarketStats(data); setStatsLoading(false); buildDomainCards(data); })
       .catch(() => setStatsLoading(false));
   }, []);
 
-  // ── Build domain cards ─────────────────────────────────────────────────
   const buildDomainCards = async stats => {
     if (!stats?.domain_counts) { setDomainsLoading(false); return; }
     const sorted = Object.entries(stats.domain_counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -603,7 +708,6 @@ export default function DiscoverPage({ onNavigate }) {
     setDomainsLoading(false);
   };
 
-  // ── News fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
     const load = () => fetchNews().then(a => { setNews(a); setNewsLoading(false); setLastRefresh(new Date()); });
     load();
@@ -613,7 +717,6 @@ export default function DiscoverPage({ onNavigate }) {
 
   const filteredNews = newsTab === 'all' ? news : newsTab === 'hn' ? news.filter(a => a.source === 'HackerNews') : news.filter(a => a.source === 'Dev.to');
 
-  // ── Skill matching ─────────────────────────────────────────────────────
   const handleSearch = async skills => {
     setLoading(true);
     try {
@@ -631,7 +734,7 @@ export default function DiscoverPage({ onNavigate }) {
   const fmt = n => `${(n * 100).toFixed(0)}%`;
   const FRESHNESS_COLOR = { fresh: 'green', aging: 'gold', expired: 'red', unknown: 'gray' };
 
-  // ── Results view ───────────────────────────────────────────────────────
+  // ── Results view ──
   if (results) {
     return (
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 28px 80px', animation: 'fadeUp .35s ease' }}>
@@ -648,7 +751,6 @@ export default function DiscoverPage({ onNavigate }) {
           New Search
         </button>
 
-        {/* Domain compatibility card */}
         <div style={{
           background: 'var(--surface-0)', border: '1px solid var(--border)',
           borderRadius: 'var(--r-lg)', padding: '24px', boxShadow: 'var(--shadow-xs)', marginBottom: 20,
@@ -671,7 +773,6 @@ export default function DiscoverPage({ onNavigate }) {
           </div>
         </div>
 
-        {/* Top matching jobs */}
         <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--blue-600)', marginBottom: 14, fontWeight: 500 }}>Top Matching Jobs</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {results.top_jobs.map((job, i) => (
@@ -713,7 +814,7 @@ export default function DiscoverPage({ onNavigate }) {
     );
   }
 
-  // ── Main landing view ──────────────────────────────────────────────────
+  // ── Main landing view ──
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 28px 80px', animation: 'fadeUp .4s ease' }}>
 
@@ -723,18 +824,15 @@ export default function DiscoverPage({ onNavigate }) {
         borderRadius: 'var(--r-xl)', overflow: 'hidden',
         boxShadow: 'var(--shadow-sm)', marginBottom: 24,
       }}>
-        {/* Blue gradient header band */}
         <div style={{
           background: 'linear-gradient(135deg, var(--blue-700) 0%, var(--blue-500) 100%)',
           padding: '40px 40px 36px', position: 'relative', overflow: 'hidden',
         }}>
-          {/* Decorative circles */}
           <div style={{ position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,.06)', pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', bottom: -40, left: 200, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,.04)', pointerEvents: 'none' }} />
 
           <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '1fr auto', gap: 32, alignItems: 'center' }}>
             <div>
-              {/* Eyebrow */}
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 7,
                 background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.22)',
@@ -745,12 +843,7 @@ export default function DiscoverPage({ onNavigate }) {
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#4ade80', display: 'inline-block', animation: 'pulse 2s infinite' }} />
                 Tunisia's Career Intelligence Platform
               </div>
-
-              <h1 style={{
-                fontFamily: 'var(--f-display)', fontSize: 'clamp(28px, 3.5vw, 42px)',
-                fontWeight: 400, color: '#fff', lineHeight: 1.15,
-                letterSpacing: '-1px', marginBottom: 12,
-              }}>
+              <h1 style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(28px, 3.5vw, 42px)', fontWeight: 400, color: '#fff', lineHeight: 1.15, letterSpacing: '-1px', marginBottom: 12 }}>
                 Navigate Your <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,.82)' }}>Career Path</em>
                 <br />
                 <span style={{ fontSize: 'clamp(18px, 2.5vw, 28px)', color: 'rgba(255,255,255,.65)' }}>in Tunisia</span>
@@ -758,8 +851,6 @@ export default function DiscoverPage({ onNavigate }) {
               <p style={{ fontSize: 14, color: 'rgba(255,255,255,.72)', lineHeight: 1.8, maxWidth: 440, marginBottom: 20 }}>
                 AI-powered semantic matching. Real-time job market intelligence. Discover what skills are in demand and where you fit best.
               </p>
-
-              {/* CTA buttons */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button
                   onClick={() => setShowInput(s => !s)}
@@ -774,7 +865,7 @@ export default function DiscoverPage({ onNavigate }) {
                   onMouseLeave={e => e.currentTarget.style.transform = 'none'}
                 >
                   <IconSparkle />
-                  Match My Skills
+                  {showInput ? 'Hide Matcher' : 'Match My Skills'}
                 </button>
                 <button
                   onClick={() => onNavigate('jobs')}
@@ -794,13 +885,12 @@ export default function DiscoverPage({ onNavigate }) {
               </div>
             </div>
 
-            {/* Stat mini-grid in hero */}
             {!statsLoading && marketStats && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 200 }}>
                 {[
-                  { label: 'Live Jobs',      value: marketStats.total_jobs,   color: '#fff'          },
-                  { label: 'Fresh this month', value: marketStats.fresh_jobs, color: '#4ade80'       },
-                  { label: 'Domains',         value: marketStats.total_domains, color: '#93c5fd'     },
+                  { label: 'Live Jobs',       value: marketStats.total_jobs,    color: '#fff'     },
+                  { label: 'Fresh this month', value: marketStats.fresh_jobs,   color: '#4ade80'  },
+                  { label: 'Domains',          value: marketStats.total_domains, color: '#93c5fd' },
                 ].map(s => (
                   <div key={s.label} style={{
                     background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)',
@@ -812,11 +902,7 @@ export default function DiscoverPage({ onNavigate }) {
                   </div>
                 ))}
                 {marketStats.semantic_enabled && (
-                  <div style={{
-                    background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)',
-                    borderRadius: 'var(--r-sm)', padding: '10px 14px',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}>
+                  <div style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 'var(--r-sm)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ color: '#93c5fd' }}><IconSparkle /></div>
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#fff', marginBottom: 1 }}>Semantic AI Active</div>
@@ -838,10 +924,7 @@ export default function DiscoverPage({ onNavigate }) {
               onChange={e => setHeroSearch(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && onNavigate('jobs', { search: heroSearch })}
               placeholder="Search jobs, skills or companies..."
-              style={{
-                flex: 1, background: 'none', border: 'none', outline: 'none',
-                color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--f-ui)',
-              }}
+              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--f-ui)' }}
             />
             <Button size="sm" onClick={() => onNavigate('jobs', { search: heroSearch })}>Search</Button>
           </div>
@@ -858,10 +941,10 @@ export default function DiscoverPage({ onNavigate }) {
       {/* ── STAT STRIP ── */}
       {!statsLoading && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 28 }}>
-          <StatCard label="Live Jobs"     value={marketStats?.total_jobs || 0}    color="var(--blue-500)" icon={<IconBriefcase />} />
-          <StatCard label="Fresh Jobs"    value={marketStats?.fresh_jobs || 0}    color="var(--emerald)"  icon={<IconTrendUp />}  />
-          <StatCard label="Domains"       value={marketStats?.total_domains || 0} color="#7c3aed"         icon={<IconLayers />}   />
-          <StatCard label="Aging Postings" value={marketStats?.aging_jobs || 0}   color="var(--amber)"    icon={<IconChartBar />} />
+          <StatCard label="Live Jobs"      value={marketStats?.total_jobs || 0}    color="var(--blue-500)" icon={<IconBriefcase />} />
+          <StatCard label="Fresh Jobs"     value={marketStats?.fresh_jobs || 0}    color="var(--emerald)"  icon={<IconTrendUp />}  />
+          <StatCard label="Domains"        value={marketStats?.total_domains || 0} color="#7c3aed"         icon={<IconLayers />}   />
+          <StatCard label="Aging Postings" value={marketStats?.aging_jobs || 0}    color="var(--amber)"    icon={<IconChartBar />} />
         </div>
       )}
       {statsLoading && (
@@ -885,9 +968,9 @@ export default function DiscoverPage({ onNavigate }) {
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--blue-600)', fontWeight: 500, whiteSpace: 'nowrap' }}>Market Snapshot</div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', flex: 1 }}>
             {[
-              { label: `${marketStats.fresh_jobs} fresh`, color: 'var(--emerald)', dot: true },
-              { label: `${marketStats.aging_jobs} aging`, color: 'var(--amber)', dot: true },
-              { label: `${marketStats.expired_jobs} expired`, color: 'var(--rose)', dot: true },
+              { label: `${marketStats.fresh_jobs} fresh`,   color: 'var(--emerald)' },
+              { label: `${marketStats.aging_jobs} aging`,   color: 'var(--amber)'   },
+              { label: `${marketStats.expired_jobs} expired`, color: 'var(--rose)' },
             ].map(item => (
               <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, display: 'inline-block' }} />
@@ -895,7 +978,6 @@ export default function DiscoverPage({ onNavigate }) {
               </div>
             ))}
           </div>
-          {/* Freshness bar */}
           <div style={{ flex: 1, maxWidth: 260, height: 6, borderRadius: 6, overflow: 'hidden', display: 'flex', gap: 1 }}>
             {[[marketStats.fresh_jobs, 'var(--emerald)'], [marketStats.aging_jobs, 'var(--amber)'], [marketStats.expired_jobs, 'var(--rose)']].map(([count, color], i) => (
               <div key={i} style={{ background: color, flex: count, borderRadius: i === 0 ? '6px 0 0 6px' : i === 2 ? '0 6px 6px 0' : 0 }} />
@@ -998,9 +1080,9 @@ export default function DiscoverPage({ onNavigate }) {
         <Section label="Posting Quality" title="Job Freshness Overview">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
             {[
-              { label: 'Fresh Jobs',      sub: 'Posted within 30 days', value: marketStats.fresh_jobs,   pct: Math.round(marketStats.fresh_jobs / marketStats.total_jobs * 100),   color: 'var(--emerald)', barColor: 'rgba(14,165,114,.12)',  borderColor: 'rgba(14,165,114,.25)' },
-              { label: 'Recent Jobs',     sub: 'Posted within 60 days', value: marketStats.aging_jobs,   pct: Math.round(marketStats.aging_jobs / marketStats.total_jobs * 100),   color: 'var(--amber)',   barColor: 'rgba(245,158,11,.12)', borderColor: 'rgba(245,158,11,.25)' },
-              { label: 'Older Postings',  sub: 'Over 60 days old',      value: marketStats.expired_jobs, pct: Math.round(marketStats.expired_jobs / marketStats.total_jobs * 100), color: 'var(--rose)',    barColor: 'rgba(240,65,108,.12)', borderColor: 'rgba(240,65,108,.25)' },
+              { label: 'Fresh Jobs',     sub: 'Posted within 30 days', value: marketStats.fresh_jobs,   pct: Math.round(marketStats.fresh_jobs / marketStats.total_jobs * 100),   color: 'var(--emerald)', barColor: 'rgba(14,165,114,.12)',  borderColor: 'rgba(14,165,114,.25)' },
+              { label: 'Recent Jobs',    sub: 'Posted within 60 days', value: marketStats.aging_jobs,   pct: Math.round(marketStats.aging_jobs / marketStats.total_jobs * 100),   color: 'var(--amber)',   barColor: 'rgba(245,158,11,.12)', borderColor: 'rgba(245,158,11,.25)' },
+              { label: 'Older Postings', sub: 'Over 60 days old',      value: marketStats.expired_jobs, pct: Math.round(marketStats.expired_jobs / marketStats.total_jobs * 100), color: 'var(--rose)',    barColor: 'rgba(240,65,108,.12)', borderColor: 'rgba(240,65,108,.25)' },
             ].map(c => (
               <div key={c.label} style={{
                 background: 'var(--surface-0)', border: '1px solid var(--border)',
@@ -1008,16 +1090,8 @@ export default function DiscoverPage({ onNavigate }) {
                 boxShadow: 'var(--shadow-xs)', position: 'relative', overflow: 'hidden',
               }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: c.color }} />
-                {/* Icon circle */}
-                <div style={{
-                  width: 36, height: 36, borderRadius: 'var(--r-sm)',
-                  background: c.barColor, border: `1px solid ${c.borderColor}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: c.color, marginBottom: 12,
-                }}>
-                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10"/>
-                  </svg>
+                <div style={{ width: 36, height: 36, borderRadius: 'var(--r-sm)', background: c.barColor, border: `1px solid ${c.borderColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.color, marginBottom: 12 }}>
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
                 </div>
                 <div style={{ fontFamily: 'var(--f-display)', fontSize: 32, color: c.color, letterSpacing: '-1px', lineHeight: 1, marginBottom: 4 }}>{c.value.toLocaleString()}</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{c.label}</div>
@@ -1055,11 +1129,7 @@ export default function DiscoverPage({ onNavigate }) {
             ))}
             <button
               onClick={() => { setNewsLoading(true); fetchNews().then(a => { setNews(a); setNewsLoading(false); setLastRefresh(new Date()); }); }}
-              style={{
-                padding: '5px 9px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)',
-                background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .18s',
-              }}
+              style={{ padding: '5px 9px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .18s' }}
               onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
               onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
               title="Refresh"
@@ -1080,11 +1150,7 @@ export default function DiscoverPage({ onNavigate }) {
             ))}
           </div>
         ) : filteredNews.length === 0 ? (
-          <div style={{
-            background: 'var(--surface-0)', border: '1px solid var(--border)',
-            borderRadius: 'var(--r-lg)', padding: '40px 24px', textAlign: 'center',
-            color: 'var(--text-muted)', fontFamily: 'var(--f-mono)', fontSize: 13,
-          }}>
+          <div style={{ background: 'var(--surface-0)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)', padding: '40px 24px', textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--f-mono)', fontSize: 13 }}>
             No articles found — check connection or click refresh to retry.
           </div>
         ) : (
@@ -1103,28 +1169,17 @@ export default function DiscoverPage({ onNavigate }) {
           borderRadius: 'var(--r-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
         }}>
           <div style={{ height: 3, background: 'linear-gradient(90deg, var(--blue-500), var(--blue-400), transparent)' }} />
-          <div style={{
-            padding: '40px 40px', display: 'grid',
-            gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 32,
-          }}>
+          <div style={{ padding: '40px 40px', display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 32 }}>
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--blue-600)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 12, fontWeight: 500 }}>
-                AI-Powered · Semantic Matching
-              </div>
-              <h2 style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--text-primary)', letterSpacing: '-0.8px', marginBottom: 10, fontWeight: 400 }}>
-                Let AI find your perfect role
-              </h2>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--blue-600)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 12, fontWeight: 500 }}>AI-Powered · Semantic Matching</div>
+              <h2 style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--text-primary)', letterSpacing: '-0.8px', marginBottom: 10, fontWeight: 400 }}>Let AI find your perfect role</h2>
               <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.8, maxWidth: 500 }}>
                 Upload your CV or describe your experience. Our engine understands context — not just keywords — and matches you with the right opportunities in Tunisia's tech market.
               </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 180 }}>
-              <Button size="lg" onClick={() => onNavigate('auth-register')} full>
-                Get Started Free
-              </Button>
-              <Button variant="ghost" size="lg" onClick={() => onNavigate('auth-login')} full>
-                Sign In
-              </Button>
+              <Button size="lg" onClick={() => onNavigate('auth-register')} full>Get Started Free</Button>
+              <Button variant="ghost" size="lg" onClick={() => onNavigate('auth-login')} full>Sign In</Button>
             </div>
           </div>
         </div>

@@ -145,7 +145,8 @@ function IconBriefcase() {
 }
 
 // ── Recommendation card ───────────────────────────────────────
-function RecCard({ job, onSave, onApply, isSaved, isApplied }) {
+// onApply now navigates to the job detail page instead of direct-applying
+function RecCard({ job, onSave, onViewJob, isSaved, isApplied }) {
   const [hov, setHov] = useState(false);
   const color = domainColor(job.domain);
   const logo  = (job.company || 'J').charAt(0).toUpperCase();
@@ -183,11 +184,18 @@ function RecCard({ job, onSave, onApply, isSaved, isApplied }) {
         }}>{logo}</div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontFamily: 'var(--f-ui)', fontSize: 14, fontWeight: 600,
-            color: 'var(--text-primary)', marginBottom: 2,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{job.title}</div>
+          {/* Clickable title navigates to job detail */}
+          <div
+            onClick={() => onViewJob(job.id)}
+            style={{
+              fontFamily: 'var(--f-ui)', fontSize: 14, fontWeight: 600,
+              color: 'var(--text-primary)', marginBottom: 2,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              cursor: 'pointer', transition: 'color .15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = color}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-primary)'}
+          >{job.title}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {job.company} &middot; {job.location}
           </div>
@@ -254,26 +262,19 @@ function RecCard({ job, onSave, onApply, isSaved, isApplied }) {
             transition: 'all .18s', fontWeight: 500,
           }}
         >{isSaved ? 'Saved' : 'Save'}</button>
-        {isApplied ? (
-          <div style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 6, background: 'var(--emerald-dim)', border: '1px solid rgba(14,165,114,.25)',
-            borderRadius: 'var(--r-sm)', padding: '7px',
-            color: 'var(--emerald)', fontSize: 12, fontFamily: 'var(--f-mono)', fontWeight: 600,
-          }}>Applied</div>
-        ) : (
-          <button
-            onClick={() => onApply(job)}
-            style={{
-              flex: 1, background: 'var(--blue-500)', border: 'none',
-              borderRadius: 'var(--r-sm)', padding: '7px',
-              color: '#fff', fontSize: 12, fontFamily: 'var(--f-ui)',
-              fontWeight: 600, cursor: 'pointer', transition: 'all .18s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--blue-600)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--blue-500)'}
-          >Apply Now</button>
-        )}
+
+        {/* "View & Apply" navigates to the job detail page */}
+        <button
+  onClick={() => onView(job)}
+  style={{
+    background: 'transparent', border: '1px solid var(--border)',
+    borderRadius: 'var(--r-sm)', padding: '7px 12px',
+    color: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--f-mono)',
+    cursor: 'pointer', transition: 'all .18s', fontWeight: 500,
+  }}
+  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--blue-400)'; e.currentTarget.style.color = 'var(--blue-600)'; }}
+  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+>View</button>
       </div>
     </div>
   );
@@ -642,14 +643,10 @@ export default function UserDashboardPage({ onNavigate }) {
     } catch (err) { push(err.message, 'error'); }
   };
 
-  const handleApply = async (job) => {
-    try {
-      const res = await userAPI.applyJob(job.id, '', false);
-      setAppliedSet(new Set(res.applied_jobs.map(String)));
-      updateUser({ applied_jobs: res.applied_jobs });
-      push(`Application submitted to ${job.company}`, 'success');
-    } catch (err) { push(err.message, 'error'); }
-  };
+  // Navigate to the jobs page and pre-select the given job ID
+ const handleViewJob = (job) => {
+  onNavigate('jobs', { jobId: job.id });
+};
 
   if (!user) return null;
 
@@ -788,16 +785,14 @@ export default function UserDashboardPage({ onNavigate }) {
                 ))}
               </div>
             ) : cfRecs.length === 0 ? (
-              /* ── EMPTY STATE (replaces old CF info banner) ── */
+              /* ── EMPTY STATE ── */
               <div style={{
                 background: 'var(--surface-0)', border: '1px solid var(--border)',
                 borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-xs)',
                 overflow: 'hidden',
               }}>
-                {/* Top accent */}
                 <div style={{ height: 3, background: 'linear-gradient(90deg, var(--blue-500), var(--blue-200), transparent)' }} />
                 <div style={{ padding: '48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                  {/* Icon */}
                   <div style={{
                     width: 60, height: 60, borderRadius: 'var(--r-lg)',
                     background: 'var(--blue-50)', border: '1px solid var(--blue-200)',
@@ -826,7 +821,6 @@ export default function UserDashboardPage({ onNavigate }) {
                       : 'Your activity is being analysed. Try saving or applying to a few more jobs to generate personalised matches.'}
                   </p>
 
-                  {/* How it works — card row */}
                   <div style={{
                     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12,
                     width: '100%', maxWidth: 560, marginBottom: 28,
@@ -859,7 +853,8 @@ export default function UserDashboardPage({ onNavigate }) {
                   {cfRecs.map((job) => (
                     <RecCard
                       key={job.id} job={job}
-                      onSave={toggleSave} onApply={handleApply}
+                      onSave={toggleSave}
+                      onView={handleViewJob}
                       isSaved={savedSet.has(String(job.id))}
                       isApplied={appliedSet.has(String(job.id))}
                     />
@@ -1235,7 +1230,6 @@ export default function UserDashboardPage({ onNavigate }) {
                         display: 'flex', alignItems: 'center', gap: 8,
                         fontSize: 12, color: item.done ? '#059669' : 'var(--text-muted)',
                       }}>
-                        {/* Check indicator */}
                         <span style={{
                           width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
                           background: item.done ? 'var(--emerald-dim)' : 'var(--surface-3)',

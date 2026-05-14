@@ -273,6 +273,11 @@ def list_jobs(
     pages = max(1, math.ceil(total / per_page))
     page  = min(page, pages)
     start = (page - 1) * per_page
+    freshness_order = {'fresh': 0, 'aging': 1, 'unknown': 2, 'expired': 3}
+    df['_freshness_rank'] = df['freshness_label'].map(freshness_order).fillna(3)
+    df = df.sort_values(['_freshness_rank', 'days_old'], ascending=[True, True])
+    df = df.drop(columns=['_freshness_rank'])
+
     slice_df = df.iloc[start:start + per_page]
 
     jobs = []

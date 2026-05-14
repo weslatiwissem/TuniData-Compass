@@ -44,7 +44,6 @@ function Router() {
         justifyContent: 'center', flexDirection: 'column', gap: 20,
         background: 'var(--surface-1)',
       }}>
-        {/* Logo */}
         <div style={{
           width: 56, height: 56, borderRadius: '50%',
           background: 'var(--blue-500)',
@@ -76,7 +75,13 @@ function Router() {
       {page !== 'auth' && <Topbar currentPage={page} onNavigate={navigate} />}
 
       {page === 'discover'  && <DiscoverPage onNavigate={navigate} />}
-      {page === 'jobs'      && <JobsPage initialSearch={pageParams.search || ''} initialDomain={pageParams.domain || ''} />}
+      {page === 'jobs'      && (
+        <JobsPage
+          initialSearch={pageParams.search || ''}
+          initialDomain={pageParams.domain || ''}
+          initialJobId={pageParams.jobId ?? null}
+        />
+      )}
       {page === 'auth'      && <AuthPage initialTab={pageParams.tab || 'login'} onSuccess={() => setPage('dashboard')} />}
 
       {page === 'dashboard' && (

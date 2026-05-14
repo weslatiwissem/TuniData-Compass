@@ -1,9 +1,12 @@
 // src/pages/JobsPage.jsx — Redesigned with professional dashboard card style
+// FIXED: jobs sorted fresh→aging→expired, supports initialJobId for direct navigation
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { jobsAPI, userAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import ApplyModal from '../components/ApplyModal';
+
+const FRESHNESS_ORDER = { fresh: 0, aging: 1, expired: 2, unknown: 3 };
 
 const FRESHNESS = {
   fresh:   { bg: '#EAF3DE', color: '#3B6D11', dot: '#639922', label: 'Fresh' },
@@ -85,7 +88,17 @@ function Spinner() {
   );
 }
 
-export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
+// Sort jobs: fresh first, then aging, then expired, then unknown
+function sortByFreshness(jobs) {
+  return [...jobs].sort((a, b) => {
+    const fa = FRESHNESS_ORDER[(a.freshness || '').toLowerCase()] ?? 3;
+    const fb = FRESHNESS_ORDER[(b.freshness || '').toLowerCase()] ?? 3;
+    if (fa !== fb) return fa - fb;
+    return (a.days_old ?? 0) - (b.days_old ?? 0); // newer = smaller days_old = first
+  });
+}
+
+export default function JobsPage({ initialSearch = '', initialDomain = '', initialJobId = null }) {
   const { user, updateUser } = useAuth();
   const { push } = useToast();
 
@@ -106,6 +119,9 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
   const [appliedSet, setAppliedSet] = useState(new Set());
   const [applyModal, setApplyModal] = useState(false);
 
+  // Track whether we've done the initial load so we can auto-select initialJobId
+  const didInitialLoad = useRef(false);
+
   const searchTimeout = useRef(null);
 
   useEffect(() => {
@@ -125,11 +141,29 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
         page: opts.page ?? page,
         perPage: 20,
       });
-      setJobs(res.jobs);
+      console.log('freshness values:', res.jobs.slice(0, 5).map(j => j.freshness));
+
+      const sorted = sortByFreshness(res.jobs);
+      setJobs(sorted);
       setTotal(res.total);
       setPages(res.pages);
       setDomains(res.domains);
-      if (res.jobs.length && !selected) setSelected(res.jobs[0]);
+
+      // On first load, if initialJobId provided, find and select that job;
+      // otherwise select the first job in the sorted list.
+      if (!didInitialLoad.current) {
+        didInitialLoad.current = true;
+        if (initialJobId !== null) {
+          const target = sorted.find(j => String(j.id) === String(initialJobId));
+          if (target) {
+            selectJob(target);
+          } else if (sorted.length) {
+            setSelected(sorted[0]);
+          }
+        } else if (sorted.length && !selected) {
+          setSelected(sorted[0]);
+        }
+      }
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -138,6 +172,14 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
   }, [search, filterDomain, filterFresh, page]);
 
   useEffect(() => { loadJobs(); }, []);
+
+  // If initialJobId changes after mount (e.g. navigating from dashboard to a specific job)
+  useEffect(() => {
+    if (initialJobId !== null && jobs.length > 0) {
+      const target = jobs.find(j => String(j.id) === String(initialJobId));
+      if (target) selectJob(target);
+    }
+  }, [initialJobId]);
 
   const handleSearch = val => {
     setSearch(val);
@@ -196,6 +238,17 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
   };
 
   const hasFilters = search || filterDomain || filterFresh;
+
+  // ── Section dividers in the list ──
+  const groupedJobs = (() => {
+    const groups = { fresh: [], aging: [], expired: [], unknown: [] };
+    jobs.forEach(j => {
+      const freshness = (j.freshness || 'unknown').toLowerCase();
+const key = groups[freshness] ? freshness : 'unknown';
+      groups[key].push(j);
+    });
+    return groups;
+  })();
 
   return (
     <div style={{ minHeight: '100vh', background: '#F7F6F2', animation: 'fadeUp .3s ease' }}>
@@ -308,52 +361,88 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
             </div>
           ) : (
             <>
-              {jobs.map((job, idx) => {
-                const isSel = selected?.id === job.id;
-                const isSaved = savedSet.has(String(job.id));
+              {/* Render jobs grouped by freshness with section headers */}
+              {['fresh', 'aging', 'expired', 'unknown'].map(group => {
+                const groupJobs = groupedJobs[group];
+                if (!groupJobs || groupJobs.length === 0) return null;
+                const f = FRESHNESS[group];
+                const groupLabels = {
+                  fresh: `Fresh — posted within 30 days (${groupJobs.length})`,
+                  aging: `Recent — posted within 60 days (${groupJobs.length})`,
+                  expired: `Older — over 60 days ago (${groupJobs.length})`,
+                  unknown: `Unknown date (${groupJobs.length})`,
+                };
                 return (
-                  <div
-                    key={job.id}
-                    onClick={() => selectJob(job)}
-                    style={{
-                      padding: '14px 16px',
-                      borderBottom: '1px solid #F1EFE8',
-                      borderLeft: `3px solid ${isSel ? '#185FA5' : 'transparent'}`,
-                      background: isSel ? '#F0F5FC' : 'transparent',
-                      cursor: 'pointer', transition: 'all .15s', position: 'relative',
-                    }}
-                    onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#FAFAF8'; }}
-                    onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    {/* Save star */}
-                    <button
-                      onClick={e => { e.stopPropagation(); toggleSave(job.id); }}
-                      style={{
-                        position: 'absolute', top: 12, right: 12,
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 15, color: isSaved ? '#BA7517' : '#B4B2A9',
-                        transition: 'color .15s', padding: 2,
-                      }}
-                    >{isSaved ? '★' : '☆'}</button>
+                  <div key={group}>
+                    {/* Section divider */}
+                    <div style={{
+                      padding: '8px 16px 6px',
+                      background: f.bg,
+                      borderBottom: `1px solid ${f.dot}30`,
+                      borderTop: group !== 'fresh' ? '1px solid #E8E6DF' : undefined,
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      position: 'sticky', top: 0, zIndex: 2,
+                    }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.dot, flexShrink: 0 }} />
+                      <span style={{
+                        fontFamily: 'var(--f-mono, monospace)', fontSize: 10,
+                        fontWeight: 600, color: f.color, letterSpacing: '0.5px',
+                      }}>
+                        {groupLabels[group]}
+                      </span>
+                    </div>
 
-                    <div style={{ display: 'flex', gap: 10, marginBottom: 8, paddingRight: 22 }}>
-                      <LogoAvatar name={job.company} idx={idx} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{
-                          fontSize: 13, fontWeight: 600, color: '#2C2C2A',
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                          marginBottom: 2,
-                        }}>{job.title}</div>
-                        <div style={{ fontSize: 11, color: '#888780' }}>
-                          {job.company} · {job.location}
+                    {groupJobs.map((job, idx) => {
+                      const isSel = selected?.id === job.id;
+                      const isSaved = savedSet.has(String(job.id));
+                      // Use global idx for palette
+                      const globalIdx = jobs.indexOf(job);
+                      return (
+                        <div
+                          key={job.id}
+                          onClick={() => selectJob(job)}
+                          style={{
+                            padding: '14px 16px',
+                            borderBottom: '1px solid #F1EFE8',
+                            borderLeft: `3px solid ${isSel ? '#185FA5' : 'transparent'}`,
+                            background: isSel ? '#F0F5FC' : 'transparent',
+                            cursor: 'pointer', transition: 'all .15s', position: 'relative',
+                          }}
+                          onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#FAFAF8'; }}
+                          onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          {/* Save star */}
+                          <button
+                            onClick={e => { e.stopPropagation(); toggleSave(job.id); }}
+                            style={{
+                              position: 'absolute', top: 12, right: 12,
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              fontSize: 15, color: isSaved ? '#BA7517' : '#B4B2A9',
+                              transition: 'color .15s', padding: 2,
+                            }}
+                          >{isSaved ? '★' : '☆'}</button>
+
+                          <div style={{ display: 'flex', gap: 10, marginBottom: 8, paddingRight: 22 }}>
+                            <LogoAvatar name={job.company} idx={globalIdx} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{
+                                fontSize: 13, fontWeight: 600, color: '#2C2C2A',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                marginBottom: 2,
+                              }}>{job.title}</div>
+                              <div style={{ fontSize: 11, color: '#888780' }}>
+                                {job.company} · {job.location}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            <FreshnessBadge freshness={job.freshness} daysOld={job.days_old} />
+                            <DomainBadge domain={job.domain} />
+                          </div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                      <FreshnessBadge freshness={job.freshness} daysOld={job.days_old} />
-                      <DomainBadge domain={job.domain} />
-                    </div>
+                      );
+                    })}
                   </div>
                 );
               })}
