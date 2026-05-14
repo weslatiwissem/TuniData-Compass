@@ -2,15 +2,14 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY . .
-RUN npm run build
+RUN ./node_modules/.bin/vite build
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# nginx config for React SPA routing
 RUN echo 'server { \
   listen 80; \
   root /usr/share/nginx/html; \

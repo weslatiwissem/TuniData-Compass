@@ -1,56 +1,87 @@
-// src/pages/JobsPage.jsx — fully connected to real /jobs API
+// src/pages/JobsPage.jsx — Redesigned with professional dashboard card style
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { jobsAPI, userAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Badge, Button, Spinner } from '../components/ui';
 import ApplyModal from '../components/ApplyModal';
 
-const FRESHNESS_COLOR = { fresh: 'green', aging: 'gold', expired: 'red', unknown: 'gray' };
-const LOGO_COLORS = ['#E8A020', '#22C87A', '#3B82F6', '#2DD4BF', '#a78bfa', '#fb923c', '#f472b6', '#f87171'];
-const fmt = n => `${(n * 100).toFixed(0)}%`;
+const FRESHNESS = {
+  fresh:   { bg: '#EAF3DE', color: '#3B6D11', dot: '#639922', label: 'Fresh' },
+  aging:   { bg: '#FAEEDA', color: '#854F0B', dot: '#BA7517', label: 'Aging' },
+  expired: { bg: '#FCEBEB', color: '#A32D2D', dot: '#E24B4A', label: 'Expired' },
+  unknown: { bg: '#F1EFE8', color: '#5F5E5A', dot: '#888780', label: 'Unknown' },
+};
 
-function SkillBadge({ skill, matched }) {
+const LOGO_PALETTE = [
+  { bg: '#E6F1FB', color: '#185FA5' },
+  { bg: '#EAF3DE', color: '#3B6D11' },
+  { bg: '#EEEDFE', color: '#534AB7' },
+  { bg: '#E1F5EE', color: '#0F6E56' },
+  { bg: '#FAEEDA', color: '#854F0B' },
+  { bg: '#FBEAF0', color: '#993556' },
+  { bg: '#FAECE7', color: '#993C1D' },
+];
+
+function FreshnessBadge({ freshness, daysOld }) {
+  const f = FRESHNESS[freshness] || FRESHNESS.unknown;
   return (
     <span style={{
-      padding: '3px 10px', borderRadius: 100, fontSize: 11, fontFamily: 'var(--f-mono)',
-      background: matched ? 'var(--green-dim)' : 'var(--ink4)',
-      border: `1px solid ${matched ? 'rgba(34,200,122,.2)' : 'var(--line)'}`,
-      color: matched ? 'var(--green)' : 'var(--ivory2)',
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 500,
+      background: f.bg, color: f.color, fontFamily: 'var(--f-mono, monospace)',
     }}>
-      {matched ? '✓ ' : ''}{skill}
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: f.dot, flexShrink: 0 }} />
+      {f.label} · {daysOld}d
     </span>
   );
 }
 
-/** Render description text preserving line-breaks and paragraphs */
-function DescriptionText({ text }) {
-  if (!text || text.trim() === '' || text === 'None' || text === 'nan') {
-    return (
-      <p style={{ color: 'var(--ivory3)', fontSize: 14, fontStyle: 'italic' }}>
-        No description available for this position.
-      </p>
-    );
-  }
-
-  // Split into paragraphs on double newline, or every ~300 chars for readability
-  const paragraphs = text
-    .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)
-    .map(p => p.trim())
-    .filter(p => p.length > 0);
-
+function DomainBadge({ domain }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {paragraphs.map((para, i) => (
-        <p key={i} style={{
-          color: 'var(--ivory2)', fontSize: 14, lineHeight: 1.8,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        }}>
-          {para}
-        </p>
-      ))}
-    </div>
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 500,
+      background: '#EEEDFE', color: '#534AB7', fontFamily: 'var(--f-mono, monospace)',
+    }}>{domain}</span>
+  );
+}
+
+function SkillPill({ skill, matched }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '3px 10px', borderRadius: 100, fontSize: 11,
+      background: matched ? '#EAF3DE' : '#F1EFE8',
+      color: matched ? '#3B6D11' : '#5F5E5A',
+      border: `1px solid ${matched ? '#C0DD97' : '#D3D1C7'}`,
+      fontFamily: 'var(--f-mono, monospace)',
+    }}>
+      {matched && <span style={{ fontSize: 10 }}>✓</span>}
+      {skill}
+    </span>
+  );
+}
+
+function LogoAvatar({ name, idx }) {
+  const p = LOGO_PALETTE[idx % LOGO_PALETTE.length];
+  return (
+    <div style={{
+      width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+      background: p.bg, border: `1px solid ${p.color}30`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 15, fontWeight: 700, color: p.color,
+      fontFamily: 'var(--f-mono, monospace)', letterSpacing: '-0.5px',
+    }}>{(name || 'J').charAt(0).toUpperCase()}</div>
+  );
+}
+
+function Spinner() {
+  return (
+    <div style={{
+      width: 28, height: 28, borderRadius: '50%',
+      border: '2.5px solid #E6F1FB', borderTop: '2.5px solid #185FA5',
+      animation: 'spin .7s linear infinite',
+    }} />
   );
 }
 
@@ -58,29 +89,25 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
   const { user, updateUser } = useAuth();
   const { push } = useToast();
 
-  // ── Filter state ──
-  const [search,       setSearch]       = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
   const [filterDomain, setFilterDomain] = useState(initialDomain);
-  const [filterFresh,  setFilterFresh]  = useState('');
-  const [page,         setPage]         = useState(1);
+  const [filterFresh, setFilterFresh] = useState('');
+  const [page, setPage] = useState(1);
 
-  // ── Data state ──
-  const [jobs,      setJobs]      = useState([]);
-  const [total,     setTotal]     = useState(0);
-  const [pages,     setPages]     = useState(1);
-  const [domains,   setDomains]   = useState([]);
-  const [loading,   setLoading]   = useState(false);
-  const [selected,  setSelected]  = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [domains, setDomains] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // ── User interaction state ──
-  const [savedSet,   setSavedSet]   = useState(new Set());
+  const [savedSet, setSavedSet] = useState(new Set());
   const [appliedSet, setAppliedSet] = useState(new Set());
   const [applyModal, setApplyModal] = useState(false);
 
   const searchTimeout = useRef(null);
 
-  // Sync user sets
   useEffect(() => {
     if (user) {
       setSavedSet(new Set((user.saved_jobs || []).map(String)));
@@ -88,24 +115,21 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
     }
   }, [user]);
 
-  // Load jobs from API
   const loadJobs = useCallback(async (opts = {}) => {
     setLoading(true);
     try {
       const res = await jobsAPI.list({
-        search:    opts.search    ?? search,
-        domain:    opts.domain    ?? filterDomain,
+        search: opts.search ?? search,
+        domain: opts.domain ?? filterDomain,
         freshness: opts.freshness ?? filterFresh,
-        page:      opts.page      ?? page,
-        perPage:   20,
+        page: opts.page ?? page,
+        perPage: 20,
       });
       setJobs(res.jobs);
       setTotal(res.total);
       setPages(res.pages);
       setDomains(res.domains);
-      if (res.jobs.length && !selected) {
-        setSelected(res.jobs[0]);
-      }
+      if (res.jobs.length && !selected) setSelected(res.jobs[0]);
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -115,19 +139,17 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
 
   useEffect(() => { loadJobs(); }, []);
 
-  const handleSearch = (val) => {
+  const handleSearch = val => {
     setSearch(val);
     setPage(1);
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => {
-      loadJobs({ search: val, page: 1 });
-    }, 350);
+    searchTimeout.current = setTimeout(() => loadJobs({ search: val, page: 1 }), 350);
   };
 
   const handleFilter = (key, val) => {
     const updates = { page: 1 };
-    if (key === 'domain')    { setFilterDomain(val);  updates.domain    = val; }
-    if (key === 'freshness') { setFilterFresh(val);   updates.freshness = val; }
+    if (key === 'domain') { setFilterDomain(val); updates.domain = val; }
+    if (key === 'freshness') { setFilterFresh(val); updates.freshness = val; }
     setPage(1);
     loadJobs(updates);
   };
@@ -137,9 +159,8 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
     loadJobs({ search: '', domain: '', freshness: '', page: 1 });
   };
 
-  const selectJob = async (job) => {
+  const selectJob = async job => {
     setSelected(job);
-    // Always fetch full detail to get the complete description
     setDetailLoading(true);
     try {
       const full = await jobsAPI.get(job.id);
@@ -148,7 +169,7 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
     setDetailLoading(false);
   };
 
-  const toggleSave = async (jobId) => {
+  const toggleSave = async jobId => {
     if (!user) { push('Sign in to save jobs', 'error'); return; }
     const isSaved = savedSet.has(String(jobId));
     try {
@@ -161,12 +182,12 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
         const res = await userAPI.saveJob(jobId);
         setSavedSet(new Set(res.saved_jobs.map(String)));
         updateUser({ saved_jobs: res.saved_jobs });
-        push('Job saved! ⭐', 'success');
+        push('Job saved!', 'success');
       }
     } catch (err) { push(err.message, 'error'); }
   };
 
-  const handleApplied = (res) => {
+  const handleApplied = res => {
     if (res?.applied_jobs) {
       setAppliedSet(new Set(res.applied_jobs.map(String)));
       updateUser({ applied_jobs: res.applied_jobs });
@@ -177,34 +198,67 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
   const hasFilters = search || filterDomain || filterFresh;
 
   return (
-    <div style={{ animation: 'fadeUp .3s ease' }}>
-      {/* ── Search bar ── */}
-      <div style={{ background: 'var(--ink2)', borderBottom: '1px solid var(--line)', padding: '16px 24px' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-            <svg style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)' }} width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="7" stroke="var(--ivory3)" strokeWidth="1.5" />
-              <path d="M20 20l-3-3" stroke="var(--ivory3)" strokeWidth="1.5" strokeLinecap="round" />
+    <div style={{ minHeight: '100vh', background: '#F7F6F2', animation: 'fadeUp .3s ease' }}>
+
+      {/* ── Top search bar ── */}
+      <div style={{
+        background: '#fff', borderBottom: '1px solid #E8E6DF',
+        padding: '14px 24px',
+        position: 'sticky', top: 0, zIndex: 10,
+      }}>
+        <div style={{
+          maxWidth: 1280, margin: '0 auto',
+          display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+        }}>
+          {/* Search input */}
+          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+            <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }}
+              width="15" height="15" fill="none" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7" stroke="#2C2C2A" strokeWidth="1.8" />
+              <path d="M20 20l-3-3" stroke="#2C2C2A" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
-            <input value={search} onChange={e => handleSearch(e.target.value)}
-              placeholder="Job title, skill, or company..."
-              style={{ width: '100%', background: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', padding: '10px 14px 10px 40px', color: 'var(--ivory)', fontSize: 14, outline: 'none', fontFamily: 'var(--f-ui)' }} />
+            <input
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+              placeholder="Search jobs, skills, or companies…"
+              style={{
+                width: '100%', padding: '9px 14px 9px 38px',
+                background: '#F7F6F2', border: '1px solid #E8E6DF',
+                borderRadius: 8, fontSize: 13, color: '#2C2C2A',
+                outline: 'none', fontFamily: 'inherit',
+                transition: 'border-color .15s',
+              }}
+              onFocus={e => e.target.style.borderColor = '#185FA5'}
+              onBlur={e => e.target.style.borderColor = '#E8E6DF'}
+            />
           </div>
 
-          <select value={filterDomain} onChange={e => handleFilter('domain', e.target.value)} style={{
-            background: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
-            padding: '10px 12px', color: filterDomain ? 'var(--ivory)' : 'var(--ivory3)',
-            fontSize: 13, outline: 'none', fontFamily: 'var(--f-ui)', appearance: 'none', cursor: 'pointer',
-          }}>
+          {/* Domain filter */}
+          <select
+            value={filterDomain}
+            onChange={e => handleFilter('domain', e.target.value)}
+            style={{
+              padding: '9px 12px', background: '#F7F6F2',
+              border: '1px solid #E8E6DF', borderRadius: 8,
+              fontSize: 13, color: filterDomain ? '#2C2C2A' : '#888780',
+              outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
             <option value="">All Domains</option>
             {domains.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
 
-          <select value={filterFresh} onChange={e => handleFilter('freshness', e.target.value)} style={{
-            background: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
-            padding: '10px 12px', color: filterFresh ? 'var(--ivory)' : 'var(--ivory3)',
-            fontSize: 13, outline: 'none', fontFamily: 'var(--f-ui)', appearance: 'none', cursor: 'pointer',
-          }}>
+          {/* Freshness filter */}
+          <select
+            value={filterFresh}
+            onChange={e => handleFilter('freshness', e.target.value)}
+            style={{
+              padding: '9px 12px', background: '#F7F6F2',
+              border: '1px solid #E8E6DF', borderRadius: 8,
+              fontSize: 13, color: filterFresh ? '#2C2C2A' : '#888780',
+              outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
             <option value="">All Freshness</option>
             <option value="fresh">Fresh (≤30d)</option>
             <option value="aging">Recent (≤60d)</option>
@@ -212,190 +266,297 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
           </select>
 
           {hasFilters && (
-            <button onClick={clearFilters} style={{
-              background: 'var(--red-dim)', border: '1px solid rgba(240,96,96,.25)',
-              borderRadius: 'var(--r-sm)', padding: '10px 14px', color: 'var(--red)',
-              fontSize: 12, cursor: 'pointer', fontFamily: 'var(--f-mono)',
-            }}>✕ Clear</button>
+            <button
+              onClick={clearFilters}
+              style={{
+                padding: '9px 14px', background: '#FCEBEB',
+                border: '1px solid #F7C1C1', borderRadius: 8,
+                fontSize: 12, color: '#A32D2D', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'background .15s',
+              }}
+            >✕ Clear filters</button>
           )}
 
-          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ivory3)', whiteSpace: 'nowrap' }}>
+          <span style={{
+            marginLeft: 'auto', fontSize: 12, color: '#888780',
+            fontFamily: 'var(--f-mono, monospace)', whiteSpace: 'nowrap',
+          }}>
             {total.toLocaleString()} jobs
           </span>
         </div>
       </div>
 
-      {/* ── Layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', maxWidth: 1200, margin: '0 auto', minHeight: 'calc(100vh - 130px)' }}>
+      {/* ── Layout grid ── */}
+      <div style={{
+        maxWidth: 1280, margin: '0 auto',
+        display: 'grid', gridTemplateColumns: '360px 1fr',
+        height: 'calc(100vh - 117px)',
+      }}>
 
-        {/* Job list sidebar */}
-        <div style={{ borderRight: '1px solid var(--line)', overflowY: 'auto', height: 'calc(100vh - 130px)', position: 'sticky', top: 60 }}>
+        {/* ── Left: Job list ── */}
+        <div style={{
+          background: '#fff', borderRight: '1px solid #E8E6DF',
+          overflowY: 'auto', height: '100%',
+        }}>
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
               <Spinner />
             </div>
           ) : jobs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--ivory3)', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: 48, color: '#888780', fontSize: 13 }}>
               No jobs match your filters.
             </div>
           ) : (
             <>
               {jobs.map((job, idx) => {
-                const isSel   = selected?.id === job.id;
+                const isSel = selected?.id === job.id;
                 const isSaved = savedSet.has(String(job.id));
-                const logoColor = LOGO_COLORS[idx % LOGO_COLORS.length];
-                const logo = (job.company || 'J').charAt(0).toUpperCase();
-
                 return (
-                  <div key={job.id} onClick={() => selectJob(job)} style={{
-                    padding: '16px', borderBottom: '1px solid var(--line)', cursor: 'pointer',
-                    background: isSel ? 'linear-gradient(90deg, rgba(232,160,32,.06), transparent)' : 'transparent',
-                    borderLeft: `3px solid ${isSel ? 'var(--gold)' : 'transparent'}`,
-                    transition: 'all .18s', position: 'relative',
-                  }}
-                    onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = 'var(--ink3)'; }}
+                  <div
+                    key={job.id}
+                    onClick={() => selectJob(job)}
+                    style={{
+                      padding: '14px 16px',
+                      borderBottom: '1px solid #F1EFE8',
+                      borderLeft: `3px solid ${isSel ? '#185FA5' : 'transparent'}`,
+                      background: isSel ? '#F0F5FC' : 'transparent',
+                      cursor: 'pointer', transition: 'all .15s', position: 'relative',
+                    }}
+                    onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#FAFAF8'; }}
                     onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <button onClick={e => { e.stopPropagation(); toggleSave(job.id); }} style={{
-                      position: 'absolute', top: 12, right: 12, background: 'none', border: 'none',
-                      cursor: 'pointer', color: isSaved ? 'var(--gold)' : 'var(--ivory3)', fontSize: 16, transition: 'color .18s',
-                    }}>{isSaved ? '★' : '☆'}</button>
+                    {/* Save star */}
+                    <button
+                      onClick={e => { e.stopPropagation(); toggleSave(job.id); }}
+                      style={{
+                        position: 'absolute', top: 12, right: 12,
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 15, color: isSaved ? '#BA7517' : '#B4B2A9',
+                        transition: 'color .15s', padding: 2,
+                      }}
+                    >{isSaved ? '★' : '☆'}</button>
 
-                    <div style={{ display: 'flex', gap: 10, marginBottom: 10, paddingRight: 24 }}>
-                      <div style={{
-                        width: 38, height: 38, borderRadius: 8, background: `${logoColor}20`,
-                        border: `1px solid ${logoColor}40`, display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', fontSize: 14, fontWeight: 700, color: logoColor,
-                        flexShrink: 0, fontFamily: 'var(--f-mono)',
-                      }}>{logo}</div>
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 8, paddingRight: 22 }}>
+                      <LogoAvatar name={job.company} idx={idx} />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--ivory3)' }}>{job.company} · {job.location}</div>
+                        <div style={{
+                          fontSize: 13, fontWeight: 600, color: '#2C2C2A',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          marginBottom: 2,
+                        }}>{job.title}</div>
+                        <div style={{ fontSize: 11, color: '#888780' }}>
+                          {job.company} · {job.location}
+                        </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <Badge color={FRESHNESS_COLOR[job.freshness]}>{job.freshness} · {job.days_old}d</Badge>
-                      <Badge color="gray">{job.domain}</Badge>
+
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      <FreshnessBadge freshness={job.freshness} daysOld={job.days_old} />
+                      <DomainBadge domain={job.domain} />
                     </div>
                   </div>
                 );
               })}
 
+              {/* Pagination */}
               {pages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '16px 12px', borderTop: '1px solid var(--line)' }}>
-                  <button disabled={page <= 1} onClick={() => { const p = page - 1; setPage(p); loadJobs({ page: p }); }}
-                    style={{ background: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: 4, padding: '5px 10px', color: 'var(--ivory2)', cursor: 'pointer', fontSize: 12 }}>←</button>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ivory3)', alignSelf: 'center' }}>{page} / {pages}</span>
-                  <button disabled={page >= pages} onClick={() => { const p = page + 1; setPage(p); loadJobs({ page: p }); }}
-                    style={{ background: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: 4, padding: '5px 10px', color: 'var(--ivory2)', cursor: 'pointer', fontSize: 12 }}>→</button>
+                <div style={{
+                  display: 'flex', justifyContent: 'center', alignItems: 'center',
+                  gap: 8, padding: '14px 12px', borderTop: '1px solid #F1EFE8',
+                }}>
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => { const p = page - 1; setPage(p); loadJobs({ page: p }); }}
+                    style={{
+                      width: 30, height: 30, borderRadius: 6,
+                      background: '#F7F6F2', border: '1px solid #E8E6DF',
+                      color: '#2C2C2A', cursor: 'pointer', fontSize: 13,
+                      opacity: page <= 1 ? 0.4 : 1,
+                    }}
+                  >←</button>
+                  <span style={{ fontSize: 11, color: '#888780', fontFamily: 'var(--f-mono, monospace)' }}>
+                    {page} / {pages}
+                  </span>
+                  <button
+                    disabled={page >= pages}
+                    onClick={() => { const p = page + 1; setPage(p); loadJobs({ page: p }); }}
+                    style={{
+                      width: 30, height: 30, borderRadius: 6,
+                      background: '#F7F6F2', border: '1px solid #E8E6DF',
+                      color: '#2C2C2A', cursor: 'pointer', fontSize: 13,
+                      opacity: page >= pages ? 0.4 : 1,
+                    }}
+                  >→</button>
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* ── Job detail panel ── */}
-        <div style={{ overflowY: 'auto', height: 'calc(100vh - 130px)', padding: 24 }}>
+        {/* ── Right: Job detail ── */}
+        <div style={{ overflowY: 'auto', height: '100%', padding: 24, background: '#F7F6F2' }}>
           {detailLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner /></div>
           ) : !selected ? (
-            <div style={{ textAlign: 'center', padding: 80, color: 'var(--ivory3)' }}>
-              <div style={{ fontSize: 48, marginBottom: 12, opacity: .3 }}>💼</div>
-              <div style={{ fontFamily: 'var(--f-display)', fontSize: 20 }}>Select a job to view details</div>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', height: '100%', color: '#B4B2A9',
+            }}>
+              <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>💼</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#888780' }}>Select a job to view details</div>
             </div>
           ) : (
-            <div style={{ animation: 'fadeUp .25s ease' }}>
+            <div style={{ animation: 'fadeUp .2s ease', maxWidth: 780 }}>
 
               {/* ── Header card ── */}
               <div style={{
-                background: 'linear-gradient(135deg, var(--ink2), rgba(232,160,32,.04))',
-                border: '1px solid var(--gold-border)', borderRadius: 'var(--r)', padding: 28, marginBottom: 16,
+                background: '#fff', border: '1px solid #E8E6DF',
+                borderRadius: 14, padding: 24, marginBottom: 16,
+                borderTop: '3px solid #185FA5',
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-                  <div style={{ display: 'flex', gap: 14 }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'flex-start', gap: 16, marginBottom: 16, flexWrap: 'wrap',
+                }}>
+                  {/* Title + company */}
+                  <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                     <div style={{
-                      width: 52, height: 52, borderRadius: 10, flexShrink: 0,
-                      background: 'var(--gold-dim)', border: '1px solid var(--gold-border)',
+                      width: 52, height: 52, borderRadius: 12, flexShrink: 0,
+                      background: '#E6F1FB', border: '1px solid #B5D4F430',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 22, fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--f-mono)',
+                      fontSize: 22, fontWeight: 700, color: '#185FA5',
+                      fontFamily: 'var(--f-mono, monospace)',
                     }}>{(selected.company || 'J').charAt(0).toUpperCase()}</div>
                     <div>
-                      <h2 style={{ fontFamily: 'var(--f-display)', fontSize: 24, letterSpacing: '-.5px', marginBottom: 4 }}>{selected.title}</h2>
-                      <div style={{ color: 'var(--ivory2)', fontSize: 14 }}>{selected.company} · {selected.location}</div>
+                      <h2 style={{
+                        fontSize: 20, fontWeight: 700, color: '#2C2C2A',
+                        marginBottom: 4, lineHeight: 1.2,
+                      }}>{selected.title}</h2>
+                      <div style={{ fontSize: 13, color: '#888780' }}>
+                        {selected.company} · {selected.location}
+                      </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => toggleSave(selected.id)} style={{
-                      background: savedSet.has(String(selected.id)) ? 'var(--gold-dim)' : 'transparent',
-                      border: `1px solid ${savedSet.has(String(selected.id)) ? 'var(--gold-border)' : 'var(--line)'}`,
-                      borderRadius: 'var(--r-sm)', padding: '9px 16px', fontSize: 13,
-                      color: savedSet.has(String(selected.id)) ? 'var(--gold)' : 'var(--ivory2)',
-                      cursor: 'pointer', fontFamily: 'var(--f-ui)', transition: 'all .18s',
-                    }}>
-                      {savedSet.has(String(selected.id)) ? '★ Saved' : '☆ Save'}
-                    </button>
+
+                  {/* Action buttons */}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button
+                      onClick={() => toggleSave(selected.id)}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+                        background: savedSet.has(String(selected.id)) ? '#FAEEDA' : '#F7F6F2',
+                        border: `1px solid ${savedSet.has(String(selected.id)) ? '#FAC77550' : '#E8E6DF'}`,
+                        color: savedSet.has(String(selected.id)) ? '#854F0B' : '#5F5E5A',
+                        fontFamily: 'inherit', fontWeight: 500, transition: 'all .15s',
+                      }}
+                    >{savedSet.has(String(selected.id)) ? '★ Saved' : '☆ Save'}</button>
+
                     {appliedSet.has(String(selected.id)) ? (
-                      <button style={{
-                        background: 'var(--green-dim)', border: '1px solid rgba(34,200,122,.25)',
-                        borderRadius: 'var(--r-sm)', padding: '9px 16px', fontSize: 13,
-                        color: 'var(--green)', fontFamily: 'var(--f-ui)', cursor: 'default',
-                      }}>✓ Applied</button>
+                      <span style={{
+                        padding: '8px 16px', borderRadius: 8, fontSize: 12,
+                        background: '#EAF3DE', color: '#3B6D11',
+                        border: '1px solid #C0DD9750', fontWeight: 600,
+                      }}>✓ Applied</span>
                     ) : (
-                      <Button onClick={() => user ? setApplyModal(true) : push('Sign in to apply', 'error')}>
-                        Apply Now →
-                      </Button>
+                      <button
+                        onClick={() => user ? setApplyModal(true) : push('Sign in to apply', 'error')}
+                        style={{
+                          padding: '8px 18px', borderRadius: 8, fontSize: 13,
+                          background: '#185FA5', border: 'none',
+                          color: '#fff', cursor: 'pointer', fontWeight: 600,
+                          fontFamily: 'inherit', transition: 'background .15s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#0C447C'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#185FA5'}
+                      >Apply Now →</button>
                     )}
+
                     {selected.apply_url && (
-                      <a href={selected.apply_url} target="_blank" rel="noreferrer" style={{
-                        display: 'inline-flex', alignItems: 'center', padding: '9px 16px',
-                        background: 'transparent', border: '1px solid var(--line)',
-                        borderRadius: 'var(--r-sm)', color: 'var(--ivory2)', fontSize: 13,
-                        textDecoration: 'none', fontFamily: 'var(--f-ui)',
-                      }}>↗ Original Post</a>
+                      <a
+                        href={selected.apply_url} target="_blank" rel="noreferrer"
+                        style={{
+                          padding: '8px 14px', borderRadius: 8, fontSize: 12,
+                          background: '#F7F6F2', border: '1px solid #E8E6DF',
+                          color: '#5F5E5A', textDecoration: 'none',
+                          fontFamily: 'inherit', fontWeight: 500,
+                        }}
+                      >↗ Original Post</a>
                     )}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <Badge color={FRESHNESS_COLOR[selected.freshness]}>{selected.freshness} · {selected.days_old}d ago</Badge>
-                  <Badge color="gold">{selected.domain}</Badge>
+
+                {/* Badges row */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <FreshnessBadge freshness={selected.freshness} daysOld={selected.days_old} />
+                  <DomainBadge domain={selected.domain} />
                   {selected.days_old > 60 && (
-                    <Badge color="red">⚠ Posting may be closed</Badge>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '3px 10px', borderRadius: 100, fontSize: 11,
+                      background: '#FCEBEB', color: '#A32D2D',
+                      fontFamily: 'var(--f-mono, monospace)',
+                    }}>⚠ Posting may be closed</span>
                   )}
                 </div>
               </div>
 
-              {/* ── About the Role — full description ── */}
+              {/* ── About the Role ── */}
               <div style={{
-                background: 'var(--ink2)', border: '1px solid var(--line)',
-                borderRadius: 'var(--r)', padding: 24, marginBottom: 14,
+                background: '#fff', border: '1px solid #E8E6DF',
+                borderRadius: 14, padding: 24, marginBottom: 16,
               }}>
                 <div style={{
-                  fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: 2,
-                  textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 16,
+                  fontSize: 10, fontWeight: 600, letterSpacing: '1.5px',
+                  textTransform: 'uppercase', color: '#185FA5',
+                  fontFamily: 'var(--f-mono, monospace)', marginBottom: 14,
                 }}>About the Role</div>
-                <DescriptionText text={selected.description} />
+
+                {(!selected.description || selected.description.trim() === '' ||
+                  selected.description === 'None' || selected.description === 'nan') ? (
+                  <p style={{ color: '#888780', fontSize: 13, fontStyle: 'italic' }}>
+                    No description available for this position.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {selected.description
+                      .replace(/\r\n/g, '\n')
+                      .split(/\n{2,}/)
+                      .map(p => p.trim())
+                      .filter(p => p.length > 0)
+                      .map((para, i) => (
+                        <p key={i} style={{
+                          color: '#444441', fontSize: 14, lineHeight: 1.8,
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
+                        }}>{para}</p>
+                      ))}
+                  </div>
+                )}
               </div>
 
               {/* ── Required Skills ── */}
-              {(selected.skills?.length > 0) && (
+              {selected.skills?.length > 0 && (
                 <div style={{
-                  background: 'var(--ink2)', border: '1px solid var(--line)',
-                  borderRadius: 'var(--r)', padding: 24,
+                  background: '#fff', border: '1px solid #E8E6DF',
+                  borderRadius: 14, padding: 24,
                 }}>
                   <div style={{
-                    fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: 2,
-                    textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12,
+                    fontSize: 10, fontWeight: 600, letterSpacing: '1.5px',
+                    textTransform: 'uppercase', color: '#185FA5',
+                    fontFamily: 'var(--f-mono, monospace)', marginBottom: 14,
                   }}>Required Skills</div>
+
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {selected.skills.map(s => {
                       const userSkills = new Set((user?.skills || []).map(x => x.toLowerCase()));
-                      return <SkillBadge key={s} skill={s} matched={userSkills.has(s.toLowerCase())} />;
+                      return <SkillPill key={s} skill={s} matched={userSkills.has(s.toLowerCase())} />;
                     })}
                   </div>
+
                   {user?.skills?.length > 0 && (
-                    <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ivory3)', fontFamily: 'var(--f-mono)' }}>
-                      ✓ = skills you already have
-                    </div>
+                    <div style={{
+                      marginTop: 12, fontSize: 11, color: '#888780',
+                      fontFamily: 'var(--f-mono, monospace)',
+                    }}>✓ = skills you already have</div>
                   )}
                 </div>
               )}
@@ -404,7 +565,7 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
         </div>
       </div>
 
-      {/* AI Apply Modal */}
+      {/* Apply modal */}
       <ApplyModal
         open={applyModal}
         onClose={() => setApplyModal(false)}
@@ -412,6 +573,11 @@ export default function JobsPage({ initialSearch = '', initialDomain = '' }) {
         user={user}
         onApplied={handleApplied}
       />
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }
